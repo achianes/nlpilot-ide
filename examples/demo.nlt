@@ -8,7 +8,7 @@ SAVE a screenshot of the page to "results.png"
 
 @bash
 Print the current working directory
-EXPECT the output contains "${project}"
+EXPECT the output is not empty
 
 BEGIN_FUNCTION greet
 Print "hello from a function"

@@ -33,12 +33,30 @@ def _wait_for_server(timeout: float = 10.0) -> bool:
     return False
 
 
+class _Api:
+    """Exposed to the web app as window.pywebview.api — native dialogs, etc."""
+
+    def __init__(self) -> None:
+        self.window = None
+
+    def pick_folder(self):
+        """Open the OS folder picker; return the chosen absolute path or None."""
+        if not self.window:
+            return None
+        result = self.window.create_file_dialog(webview.FOLDER_DIALOG)
+        if result:
+            return result[0]
+        return None
+
+
 def main() -> None:
     t = threading.Thread(target=_serve, daemon=True)
     t.start()
     if not _wait_for_server():
         raise RuntimeError("backend did not start in time")
-    webview.create_window("nlpilot-ide", _URL, width=1400, height=900)
+    api = _Api()
+    window = webview.create_window("nlpilot-ide", _URL, width=1400, height=900, js_api=api)
+    api.window = window
     webview.start()
 
 

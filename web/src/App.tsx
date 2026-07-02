@@ -9,6 +9,7 @@ import { EditorPane } from "./components/EditorPane";
 import { DebugToolbar } from "./components/DebugToolbar";
 import { DebugSidebar, Console } from "./components/DebugPanels";
 import { GenView } from "./components/GenView";
+import { BusyOverlay } from "./components/BusyOverlay";
 
 export function App() {
   const [connected, setConnected] = useState(false);
@@ -44,7 +45,31 @@ export function App() {
       </div>
       <div className="main">
         <aside className="sidebar">
-          <div className="sidebar-head">EXPLORER</div>
+          <div className="sidebar-head">
+            <span>EXPLORER</span>
+            <button
+              className="folder-btn"
+              title="Change project folder"
+              onClick={async () => {
+                // Native OS folder picker in the desktop app; text prompt in browser.
+                const pyapi = (window as any).pywebview?.api;
+                let p: string | null = null;
+                if (pyapi?.pick_folder) {
+                  p = await pyapi.pick_folder();
+                } else {
+                  p = window.prompt("Project folder path:", root);
+                }
+                if (!p || p === root) return;
+                try {
+                  await useStore.getState().setRoot(p);
+                } catch (e: any) {
+                  window.alert("Could not open folder:\n" + (e?.message ?? e));
+                }
+              }}
+            >
+              ⊞ Open
+            </button>
+          </div>
           <FileTree />
         </aside>
         <section className="editor-area">
@@ -70,6 +95,12 @@ export function App() {
         </section>
         <DebugSidebar />
       </div>
+      {nlt.status === "generating" && (
+        <BusyOverlay
+          title="Generating Python from your .nlt…"
+          detail={`Calling Ollama (${nlt.file ?? ""}). Each block is one model call — first run can take a while.`}
+        />
+      )}
     </div>
   );
 }

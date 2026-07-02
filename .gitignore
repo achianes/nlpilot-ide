@@ -62,3 +62,7 @@ node_modules/
 
 # Claude Code worktree/session data
 .claude/
+
+# Debug run artifacts
+examples/results.png
+*.png

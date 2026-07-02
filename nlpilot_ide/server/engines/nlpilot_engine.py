@@ -49,6 +49,9 @@ class GenTracer:
         self.stopframe = None
         self.quitting = False
         self._block_first_line_seen = False
+        # Pause at the very first executable line of the whole session (entry-stop),
+        # like a normal debugger, so the user can step even with no breakpoints set.
+        self._pause_at_entry = True
 
     def block_started(self) -> None:
         """Called at each block's on_before_exec: decide initial mode."""
@@ -70,6 +73,9 @@ class GenTracer:
         return self.trace
 
     def _should_stop(self, frame) -> bool:
+        if self._pause_at_entry:
+            self._pause_at_entry = False
+            return True
         if self.mode == "step":
             return True
         if self.mode == "next":

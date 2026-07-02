@@ -13,6 +13,7 @@ interface State {
   open: OpenFile[];
   active: string | null; // active file path
   loadTree: () => Promise<void>;
+  setRoot: (path: string) => Promise<void>;
   openFile: (path: string) => Promise<void>;
   closeFile: (path: string) => void;
   setActive: (path: string) => void;
@@ -29,6 +30,13 @@ export const useStore = create<State>((set, get) => ({
   loadTree: async () => {
     const [{ root }, tree] = await Promise.all([api.root(), api.tree()]);
     set({ root, tree });
+  },
+
+  setRoot: async (path) => {
+    const { root } = await api.setRoot(path);
+    set({ root, open: [], active: null }); // close stale tabs from the old root
+    const tree = await api.tree();
+    set({ tree });
   },
 
   openFile: async (path) => {

@@ -95,6 +95,16 @@ export const useDebug = create<DebugState>((set, get) => ({
         break;
       }
 
+      case Evt.ERROR: {
+        // If a generate/run was in flight, unstick the UI and surface the reason.
+        const reason = (m.payload as any).reason ?? "error";
+        set((s) => ({
+          nlt: s.nlt.status === "generating" ? { ...s.nlt, status: "idle" } : s.nlt,
+          console: [...get().console, { stream: "err", text: `[error] ${reason}\n` }],
+        }));
+        break;
+      }
+
       // ---- nlpilot ----
       case Evt.NLT_GENERATED:
         set((s) => ({
