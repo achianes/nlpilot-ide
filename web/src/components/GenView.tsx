@@ -99,7 +99,13 @@ export function GenView() {
 
   return (
     <div className="gen-view">
-      <div className="gen-head">GENERATED PYTHON {nlt.stale && <span className="stale">stale — regenerate</span>}</div>
+      <div className="gen-head">
+        GENERATED PYTHON
+        {nlt.activeBlock != null && (
+          <span className="gen-active">block {nlt.activeBlock + 1}/{nlt.generated.length}</span>
+        )}
+        {nlt.stale && <span className="stale">stale — regenerate</span>}
+      </div>
       <div className="gen-host">
         <Editor
           language="python"

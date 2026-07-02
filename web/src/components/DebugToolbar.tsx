@@ -7,12 +7,14 @@ export function DebugToolbar() {
   const active = useStore((s) => s.active);
   const d = useDebug();
 
+  const stepping = useDebug((s) => s.stepping);
   const isPy = !!active && active.endsWith(".py");
   const isNlt = !!active && active.endsWith(".nlt");
 
   // Which engine is driving the flow controls?
   const nltActive = nlt.status === "running" || nlt.status === "paused";
-  const paused = status === "paused" || nlt.status === "paused";
+  // While a step/continue is in flight the target is executing: freeze controls.
+  const paused = (status === "paused" || nlt.status === "paused") && !stepping;
   const running = status !== "idle" || nltActive;
   const idle = !running;
 
@@ -36,7 +38,7 @@ export function DebugToolbar() {
       <button onClick={d.stepOut} disabled={!paused} title="Step out">⤒</button>
       <button onClick={d.stop} disabled={idle} title="Stop">⏹</button>
       <span className={`dbg-status ${paused ? "paused" : running ? "running" : "idle"}`}>
-        {nltActive ? `nlt:${nlt.status}` : status}
+        {stepping ? "executing…" : nltActive ? `nlt:${nlt.status}` : status}
       </span>
     </div>
   );

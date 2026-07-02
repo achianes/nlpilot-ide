@@ -59,12 +59,11 @@ def test_continue_runs_to_end():
     assert lines == [1]
 
 
-def test_entry_pause_even_without_breakpoint():
-    # With no breakpoints, the tracer still stops once at the entry line (like a
-    # normal debugger), then 'continue' (default command) runs to the end.
+def test_no_breakpoint_runs_straight_through():
+    # No breakpoints → no pauses at all; the run must not wait on anything.
     src = "a = 1\nb = 2\n"
     lines = _run(src, [], breakpoints=set())
-    assert lines == [1]
+    assert lines == []
 
 
 def test_stop_aborts():

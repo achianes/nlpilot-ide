@@ -3,6 +3,7 @@ import { ws } from "./ws/client";
 import { Evt, type Message } from "./ws/protocol";
 import { useStore } from "./state/store";
 import { useDebug } from "./state/debug";
+import { api } from "./api";
 import { FileTree } from "./components/FileTree";
 import { Tabs } from "./components/Tabs";
 import { EditorPane } from "./components/EditorPane";
@@ -10,6 +11,7 @@ import { DebugToolbar } from "./components/DebugToolbar";
 import { DebugSidebar, Console } from "./components/DebugPanels";
 import { GenView } from "./components/GenView";
 import { BusyOverlay } from "./components/BusyOverlay";
+import { StatusBar } from "./components/StatusBar";
 
 export function App() {
   const [connected, setConnected] = useState(false);
@@ -51,12 +53,14 @@ export function App() {
               className="folder-btn"
               title="Change project folder"
               onClick={async () => {
-                // Native OS folder picker in the desktop app; text prompt in browser.
-                const pyapi = (window as any).pywebview?.api;
+                // Native OS folder chooser via the backend (tkinter). Falls back
+                // to a text prompt only if that fails.
                 let p: string | null = null;
-                if (pyapi?.pick_folder) {
-                  p = await pyapi.pick_folder();
-                } else {
+                try {
+                  const r = await api.pickFolder();
+                  p = r.path || null;
+                  if (p === null) return; // user cancelled the dialog
+                } catch {
                   p = window.prompt("Project folder path:", root);
                 }
                 if (!p || p === root) return;
@@ -89,6 +93,7 @@ export function App() {
               </div>
             )}
           </div>
+          <StatusBar />
           <div className="console-strip">
             <Console />
           </div>

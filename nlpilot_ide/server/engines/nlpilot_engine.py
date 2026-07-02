@@ -49,9 +49,6 @@ class GenTracer:
         self.stopframe = None
         self.quitting = False
         self._block_first_line_seen = False
-        # Pause at the very first executable line of the whole session (entry-stop),
-        # like a normal debugger, so the user can step even with no breakpoints set.
-        self._pause_at_entry = True
 
     def block_started(self) -> None:
         """Called at each block's on_before_exec: decide initial mode."""
@@ -73,9 +70,6 @@ class GenTracer:
         return self.trace
 
     def _should_stop(self, frame) -> bool:
-        if self._pause_at_entry:
-            self._pause_at_entry = False
-            return True
         if self.mode == "step":
             return True
         if self.mode == "next":
@@ -198,7 +192,9 @@ def _make_hook(send, tracer):
 # subprocess entry
 # ---------------------------------------------------------------------------
 def _nlpilot_process_main(source, base_dir, cmd_conn, io_conn, breakpoints):
-    # Redirect stdout/stderr into the IO pipe.
+    # Redirect stdout/stderr onto the SAME pipe as the debug events, so console
+    # output and block enter/exit arrive in true execution order (two pipes
+    # would race and e.g. show a PASS line after its block's exit marker).
     class _Redir:
         def __init__(self, stream):
             self.stream = stream
@@ -206,7 +202,7 @@ def _nlpilot_process_main(source, base_dir, cmd_conn, io_conn, breakpoints):
         def write(self, text):
             if text:
                 try:
-                    io_conn.send((self.stream, {"text": text}))
+                    cmd_conn.send((self.stream, {"text": text}))
                 except (OSError, EOFError, BrokenPipeError):
                     pass
 

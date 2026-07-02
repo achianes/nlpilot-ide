@@ -52,6 +52,14 @@ def create_app(root: str | Path | None = None) -> FastAPI:
     async def get_tree() -> JSONResponse:
         return JSONResponse(project.tree().to_dict())
 
+    @app.post("/api/pick-folder")
+    async def pick_folder() -> JSONResponse:
+        # Native OS folder chooser (tkinter, run in a subprocess so it never
+        # touches the server's own event loop / GUI thread). Blocks until the
+        # user picks or cancels; returns "" on cancel.
+        path = await asyncio.to_thread(_native_pick_folder)
+        return JSONResponse({"path": path})
+
     @app.get("/api/file")
     async def get_file(path: str) -> JSONResponse:
         try:
@@ -122,6 +130,29 @@ def create_app(root: str | Path | None = None) -> FastAPI:
             )
 
     return app
+
+
+def _native_pick_folder() -> str:
+    """Show a native 'choose folder' dialog via a short tkinter subprocess and
+    return the selected absolute path ('' if cancelled)."""
+    import subprocess
+    import sys
+
+    code = (
+        "import tkinter, tkinter.filedialog as fd;"
+        "r=tkinter.Tk(); r.withdraw();"
+        "r.attributes('-topmost', True);"
+        "p=fd.askdirectory(title='Select project folder');"
+        "print(p or '')"
+    )
+    try:
+        out = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True, text=True, timeout=300,
+        )
+        return out.stdout.strip()
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 app = create_app()

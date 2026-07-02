@@ -24,6 +24,8 @@ export const api = {
       body: JSON.stringify({ path }),
     }).then(json<{ root: string }>),
   tree: () => fetch("/api/tree").then(json<TreeNode>),
+  pickFolder: () =>
+    fetch("/api/pick-folder", { method: "POST" }).then(json<{ path: string }>),
   read: (path: string) =>
     fetch(`/api/file?path=${encodeURIComponent(path)}`).then(
       json<{ path: string; content: string }>

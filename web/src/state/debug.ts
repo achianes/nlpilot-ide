@@ -21,6 +21,8 @@ export interface NltState {
 
 interface DebugState {
   status: Status;
+  /** a step/continue command is in flight — the target is executing; freeze controls */
+  stepping: boolean;
   paused: { file: string; line: number } | null;
   frames: Frame[];
   locals: Record<string, string>;
@@ -52,8 +54,20 @@ const emptyNlt: NltState = {
   genLine: null, blocks: {}, breakpoints: [], stale: false,
 };
 
+// Debug pressed while the generated view was stale/missing: regenerate first,
+// then auto-run when nlt.generated arrives.
+let pendingRun = false;
+
+/** Save the file if it has unsaved edits — generate/run read from disk. */
+async function saveIfDirty(path: string): Promise<void> {
+  const st = useStore.getState();
+  const f = st.open.find((x) => x.path === path);
+  if (f && f.content !== f.saved) await st.save(path);
+}
+
 export const useDebug = create<DebugState>((set, get) => ({
   status: "idle",
+  stepping: false,
   paused: null,
   frames: [],
   locals: {},
@@ -67,11 +81,11 @@ export const useDebug = create<DebugState>((set, get) => ({
         set({ status: "running", paused: null, frames: [], locals: {} });
         break;
       case Evt.RUN_END:
-        set({ status: "idle", paused: null, frames: [] });
+        set({ status: "idle", stepping: false, paused: null, frames: [] });
         break;
       case Evt.PY_LINE: {
         const { file, line } = m.payload as { file: string; line: number };
-        set({ status: "paused", paused: { file, line } });
+        set({ status: "paused", stepping: false, paused: { file, line } });
         // auto-open the paused file so the highlight is visible
         useStore.getState().openFile(file).catch(() => {});
         break;
@@ -97,27 +111,44 @@ export const useDebug = create<DebugState>((set, get) => ({
 
       case Evt.ERROR: {
         // If a generate/run was in flight, unstick the UI and surface the reason.
+        pendingRun = false;
         const reason = (m.payload as any).reason ?? "error";
         set((s) => ({
           nlt: s.nlt.status === "generating" ? { ...s.nlt, status: "idle" } : s.nlt,
+          stepping: false,
           console: [...get().console, { stream: "err", text: `[error] ${reason}\n` }],
         }));
         break;
       }
 
       // ---- nlpilot ----
-      case Evt.NLT_GENERATED:
+      case Evt.NLT_GENERATED: {
         set((s) => ({
           nlt: { ...s.nlt, generated: (m.payload as any).blocks as GenBlock[],
                  status: "idle", stale: false },
         }));
+        // Debug was pressed on a stale .nlt: fresh code is in, start the run now.
+        if (pendingRun) {
+          pendingRun = false;
+          const file = get().nlt.file;
+          if (file) {
+            set((s) => ({ nlt: { ...s.nlt, blocks: {} }, console: [] }));
+            ws.send(Cmd.NLT_RUN, { path: file, breakpoints: get().nlt.breakpoints });
+          }
+        }
         break;
+      }
       case Evt.NLT_RUN_START:
         set((s) => ({ nlt: { ...s.nlt, status: "running", activeBlock: null, genLine: null, blocks: {} }, console: [] }));
         break;
-      case Evt.NLT_BLOCK_ENTER:
-        set((s) => ({ nlt: { ...s.nlt, activeBlock: (m.payload as any).index } }));
+      case Evt.NLT_BLOCK_ENTER: {
+        const { index, backend } = m.payload as { index: number; backend: string };
+        set((s) => ({
+          nlt: { ...s.nlt, activeBlock: index },
+          console: [...s.console, { stream: "out", text: `── block #${index} @${backend} ──\n` }],
+        }));
         break;
+      }
       case Evt.NLT_COMPILE: {
         const { index, code } = m.payload as { index: number; code: string };
         set((s) => ({
@@ -135,6 +166,7 @@ export const useDebug = create<DebugState>((set, get) => ({
           { index: number; genLine: number; locals: Record<string, string> };
         set((s) => ({
           nlt: { ...s.nlt, status: "paused", activeBlock: index, genLine },
+          stepping: false,
           locals: locals ?? {},
         }));
         break;
@@ -152,11 +184,18 @@ export const useDebug = create<DebugState>((set, get) => ({
       case Evt.NLT_BLOCK_EXIT: {
         const { index, ok, attempts, error } = m.payload as
           { index: number; ok: boolean; attempts: number; error: string | null };
-        set((s) => ({ nlt: { ...s.nlt, blocks: { ...s.nlt.blocks, [index]: { ...s.nlt.blocks[index], ok, attempts, error } } } }));
+        const verdict = ok ? "✓ ok" : `✗ FAIL${error ? ` — ${error}` : ""}`;
+        set((s) => ({
+          nlt: { ...s.nlt, blocks: { ...s.nlt.blocks, [index]: { ...s.nlt.blocks[index], ok, attempts, error } } },
+          console: [...s.console, { stream: ok ? "out" : "err", text: `── block #${index} ${verdict}${attempts > 1 ? ` (${attempts} attempts)` : ""} ──\n` }],
+        }));
         break;
       }
       case Evt.NLT_RUN_END:
-        set((s) => ({ nlt: { ...s.nlt, status: "idle", activeBlock: null, genLine: null } }));
+        set((s) => ({
+          nlt: { ...s.nlt, status: "idle", activeBlock: null, genLine: null },
+          stepping: false,
+        }));
         break;
     }
   },
@@ -180,24 +219,34 @@ export const useDebug = create<DebugState>((set, get) => ({
   },
   stop: () => {
     ws.send(Cmd.STOP);
-    set((s) => ({ nlt: { ...s.nlt, status: "idle", activeBlock: null, genLine: null } }));
+    set((s) => ({ nlt: { ...s.nlt, status: "idle", activeBlock: null, genLine: null }, stepping: false }));
   },
-  cont: () => ws.send(Cmd.CONTINUE),
-  stepOver: () => ws.send(Cmd.STEP_OVER),
-  stepInto: () => ws.send(Cmd.STEP_INTO),
-  stepOut: () => ws.send(Cmd.STEP_OUT),
+  cont: () => { set({ stepping: true }); ws.send(Cmd.CONTINUE); },
+  stepOver: () => { set({ stepping: true }); ws.send(Cmd.STEP_OVER); },
+  stepInto: () => { set({ stepping: true }); ws.send(Cmd.STEP_INTO); },
+  stepOut: () => { set({ stepping: true }); ws.send(Cmd.STEP_OUT); },
   clearConsole: () => set({ console: [] }),
 
   // ---- nlpilot ----
-  nltGenerate: () => {
+  nltGenerate: async () => {
     const active = useStore.getState().active;
     if (!active || !active.endsWith(".nlt")) return;
+    await saveIfDirty(active); // generate reads from disk
     set((s) => ({ nlt: { ...s.nlt, file: active, status: "generating", stale: false } }));
     ws.send(Cmd.NLT_GENERATE, { path: active });
   },
-  nltRun: () => {
+  nltRun: async () => {
     const active = useStore.getState().active;
     if (!active || !active.endsWith(".nlt")) return;
+    await saveIfDirty(active); // run reads from disk
+    const n = get().nlt;
+    // Edited or never generated → regenerate first, auto-run when it lands.
+    if (n.stale || !n.generated || n.file !== active) {
+      pendingRun = true;
+      set((s) => ({ nlt: { ...s.nlt, file: active, status: "generating", stale: false, generated: n.file === active ? s.nlt.generated : null } }));
+      ws.send(Cmd.NLT_GENERATE, { path: active });
+      return;
+    }
     set((s) => ({ nlt: { ...s.nlt, file: active, blocks: {}, stale: false }, console: [] }));
     ws.send(Cmd.NLT_RUN, { path: active, breakpoints: get().nlt.breakpoints });
   },

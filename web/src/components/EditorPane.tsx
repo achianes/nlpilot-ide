@@ -17,6 +17,10 @@ export function EditorPane() {
   const nltToggleBreakpoint = useDebug((s) => s.nltToggleBreakpoint);
 
   const isNlt = !!active && active.endsWith(".nlt");
+  // Lock the .nlt while its debug session is live — editing would desync the
+  // generated code (the stale banner covers the accidental-path anyway).
+  const nltLocked =
+    isNlt && nlt.file === active && (nlt.status === "running" || nlt.status === "paused");
 
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<Monaco | null>(null);
@@ -133,6 +137,7 @@ export function EditorPane() {
         scrollBeyondLastLine: false,
         tabSize: 2,
         renderWhitespace: "selection",
+        readOnly: nltLocked,
       }}
     />
   );

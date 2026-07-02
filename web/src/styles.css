@@ -148,6 +148,25 @@ button:disabled { background: var(--panel2); color: var(--fg-dim); cursor: defau
   padding: 5px 12px; border-bottom: 1px solid var(--border);
 }
 
+/* status bar (debug narrative) */
+.statusbar {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; padding: 4px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--fg-dim);
+  flex: 0 0 auto;
+}
+.statusbar.paused { color: var(--ok); background: rgba(78, 201, 176, 0.07); }
+.statusbar.exec { color: #d7ba7d; background: rgba(215, 186, 125, 0.07); }
+.statusbar-ico { font-size: 11px; }
+.statusbar-spin {
+  width: 11px; height: 11px; flex: 0 0 auto;
+  border: 2px solid var(--border); border-top-color: #d7ba7d;
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+.gen-active { color: var(--ok); }
+
 /* busy modal overlay (Generate) */
 .overlay {
   position: fixed; inset: 0; z-index: 1000;
