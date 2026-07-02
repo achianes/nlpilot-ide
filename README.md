@@ -1,123 +1,34 @@
-# 🐞 Python Debug GUI
+# nlpilot-ide
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](#requirements)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-informational)](#)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](#license)
+The reference editor/debugger IDE for the [nlpilot](https://github.com/achianes/nlpilot)
+natural-language automation framework — a web-tech desktop app (no more tkinter).
 
-A lightweight **desktop GUI debugger** for Python scripts, built with **Tkinter**.  
-Breakpoints, step controls, call stack and variable inspection — without needing a full IDE.
+Debugs two things behind one UI:
 
----
+- **`.nlt` scripts** — click **Generate** to compile every block to Python, then
+  step through the generated code line by line. The current generated line and its
+  source `.nlt` block light up together (dual synced view). Editing the `.nlt`
+  during a session halts it and prompts a regenerate.
+- **plain Python** — classic line-level debugging (breakpoints, step in/over/out,
+  variables, call stack, console) via `bdb`.
 
-## ✨ Highlights
+## Stack
 
-- 🔴 **Breakpoints** (add/remove quickly)
-- ⏭ **Step Into / Step Over / Continue**
-- 🧵 **Call stack** viewer
-- 📦 **Variable inspector** (locals / globals)
-- 🖥 **Integrated console** (stdout / stderr)
-- ⚙️ **Isolated backend** using `multiprocessing` (keeps the GUI responsive)
+- **Backend**: FastAPI + WebSocket (`nlpilot_ide/server`)
+- **Frontend**: React + TypeScript + Monaco (`web/`), Monaco bundled locally (offline)
+- **Desktop shell**: pywebview (`nlpilot_ide/desktop`)
 
----
-
-## 🖼 Screenshots
-
-TBD
-## 🚀 Quick start
-
-### 1) Clone
+## Quick start
 
 ```bash
-git clone https://github.com/achianes/python_dbg_gui.git
-cd python_dbg_gui
+pip install -e .
+pip install -e ../nlpilot          # the nlpilot framework, editable
+cd web && npm install && npm run build && cd ..
+nlpilot-ide                        # native window
+# or browser dev with hot reload:
+#   nlpilot-ide-server             # backend on :8760
+#   cd web && npm run dev          # frontend on :5173
 ```
 
-### 2) Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 3) Run
-
-```bash
-python main.py
-```
-
----
-
-## 🧪 Debugging Flask apps (important)
-
-If you debug a Flask application, disable Werkzeug reloader and threading to avoid spawning extra processes/threads that may confuse tracing:
-
-```python
-app.run(debug=False, use_reloader=False, threaded=False)
-```
-
----
-
-## 🏗 How it works
-
-This project uses:
-
-- `bdb.Bdb` for tracing and breakpoint control
-- `multiprocessing.Process` to run the target script in an isolated backend
-- `Pipe` to communicate between GUI and backend
-- Thread-safe console redirection to show `stdout`/`stderr` in the GUI
-
-Why the backend process matters:
-- Keeps the GUI responsive even when the debugged script blocks or is slow
-- Avoids contaminating the GUI process state
-
----
-
-## 📁 Project structure
-
-```text
-python_dbg_gui/
-├─ gui/                  # GUI + debugger backend components
-├─ main.py               # Entry point
-├─ requirements.txt
-└─ README.md
-```
-
----
-
-## 🧾 Requirements
-
-- Python **3.10+**
-- Tkinter (bundled with standard Python on Windows/macOS; on some Linux distros you may need `python3-tk`)
-
----
-
-## 🗺 Roadmap (ideas)
-
-- [ ] Search + filter in variables view  
-- [ ] Conditional breakpoints  
-- [ ] Watch expressions  
-- [ ] Better support for multi-thread tracing  
-- [ ] Export stack/locals snapshot
-
----
-
-## 🤝 Contributing
-
-PRs are welcome. If you open an issue, include:
-- OS + Python version
-- Steps to reproduce
-- A minimal example script (if possible)
-
----
-
-## License
-
-MIT — see `LICENSE` (or add one if missing).
-
----
-
-## Author
-
-Antonio Chianese  
-GitHub: https://github.com/achianes
-
-[![Support me on PayPal](https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif)](https://www.paypal.com/donate/?hosted_button_id=T4SKREGYTG5ES)
+See [DEV.md](DEV.md) for the full dev guide and [REBUILD_PLAN.md](REBUILD_PLAN.md)
+for architecture and roadmap.
