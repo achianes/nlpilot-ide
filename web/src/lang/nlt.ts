@@ -8,6 +8,7 @@ import type { Monaco } from "@monaco-editor/react";
 const BACKENDS = [
   "@web", "@windows", "@android", "@linux", "@vision",
   "@ssh", "@bash", "@powershell", "@http", "@db",
+  "@capture", "@redrat",
 ];
 const FLAGS = ["@cache", "@nocache", "@allow", "@workdir"];
 
