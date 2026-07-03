@@ -60,6 +60,7 @@ class Evt:
     NLT_ASSERTIONS = "nlt.assertions"  # {index, failures}
     NLT_BLOCK_EXIT = "nlt.blockExit"   # {index, ok, attempts, error}
     NLT_RUN_END = "nlt.runEnd"         # {}
+    NLT_FRAME = "nlt.frame"            # {jpeg}  — b64 JPEG of the frozen capture frame
 
 
 @dataclass

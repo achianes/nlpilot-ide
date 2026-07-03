@@ -44,6 +44,7 @@ export const Evt = {
   NLT_ASSERTIONS: "nlt.assertions",
   NLT_BLOCK_EXIT: "nlt.blockExit",
   NLT_RUN_END: "nlt.runEnd",
+  NLT_FRAME: "nlt.frame",
 } as const;
 
 export interface Frame { file: string; line: number; name: string; }

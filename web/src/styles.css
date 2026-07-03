@@ -274,6 +274,15 @@ button:disabled { background: var(--panel2); color: var(--fg-dim); cursor: defau
 .vname { color: #9cdcfe; white-space: nowrap; }
 .vval { color: var(--fg); word-break: break-all; }
 
+/* capture video panel */
+.capture-panel { flex: 0 0 auto !important; }
+.capture-body {
+  flex: 1; min-height: 0; display: flex;
+  align-items: center; justify-content: center;
+  background: #000; overflow: hidden;
+}
+.capture-body img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
 /* blocks panel */
 .blk { padding: 2px 2px; border-radius: 3px; }
 .blk.active { background: rgba(78, 201, 176, 0.10); }

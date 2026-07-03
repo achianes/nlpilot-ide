@@ -163,6 +163,21 @@ def _make_hook(send, tracer):
 
         def on_before_exec(self, index, code, namespace):
             self._index = index
+            # capture backend: forward every frozen frame to the IDE video panel
+            env = namespace.get("env")
+            if env is not None and hasattr(env, "on_frame") \
+                    and not getattr(env, "_ide_frame_hooked", False):
+                import base64
+
+                def _send_frame(jpg_bytes):
+                    send(("nlt_frame",
+                          {"jpeg": base64.b64encode(jpg_bytes).decode("ascii")}))
+
+                try:
+                    env.on_frame = _send_frame
+                    env._ide_frame_hooked = True
+                except Exception:  # noqa: BLE001
+                    pass
             tracer.block_started()
             # settrace installs the global trace for the thread; the exec() that
             # runs immediately after creates the <nlpilot> frame, which the tracer
@@ -377,6 +392,7 @@ class NlpilotDebugSession:
             "nlt_assertions": "nlt.assertions",
             "nlt_block_exit": "nlt.blockExit",
             "nlt_run_end": "nlt.runEnd",
+            "nlt_frame": "nlt.frame",
             "stdout": "stdout",
             "stderr": "stderr",
         }

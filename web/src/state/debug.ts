@@ -19,6 +19,7 @@ export interface NltState {
   breakpoints: number[];        // block indices
   lineBreakpoints: [number, number][]; // (block index, 1-based gen line)
   stale: boolean;               // .nlt edited since last generate/run
+  frame: string | null;         // b64 JPEG — last frozen @capture frame
 }
 
 /** Map a 1-based generated-code line to its .nlt source line using the
@@ -99,7 +100,7 @@ interface DebugState {
 const emptyNlt: NltState = {
   file: null, status: "idle", generated: null, activeBlock: null,
   genLine: null, sourceLine: null, blocks: {}, breakpoints: [],
-  lineBreakpoints: [], stale: false,
+  lineBreakpoints: [], stale: false, frame: null,
 };
 
 // Debug pressed while the generated view was stale/missing: regenerate first,
@@ -245,6 +246,9 @@ export const useDebug = create<DebugState>((set, get) => ({
         }));
         break;
       }
+      case Evt.NLT_FRAME:
+        set((s) => ({ nlt: { ...s.nlt, frame: (m.payload as any).jpeg as string } }));
+        break;
       case Evt.NLT_RUN_END:
         set((s) => ({
           nlt: { ...s.nlt, status: "idle", activeBlock: null, genLine: null, sourceLine: null },

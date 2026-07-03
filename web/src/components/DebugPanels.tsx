@@ -1,6 +1,26 @@
 import { useEffect, useRef } from "react";
 import { useDebug } from "../state/debug";
 import { useStore } from "../state/store";
+import { DragBar, useSplitSize } from "./Split";
+
+/** Live view of the @capture backend: shows the exact frozen frame every check
+ *  ran against. Resizable via the drag bar underneath. */
+function CapturePanel() {
+  const frame = useDebug((s) => s.nlt.frame);
+  const [h, setH] = useSplitSize("capture", 220);
+  if (!frame) return null;
+  return (
+    <>
+      <div className="panel capture-panel" style={{ flex: `0 0 ${h}px` }}>
+        <div className="panel-head">CAPTURE — frozen frame</div>
+        <div className="capture-body">
+          <img src={`data:image/jpeg;base64,${frame}`} alt="capture frame" />
+        </div>
+      </div>
+      <DragBar dir="h" size={h} setSize={setH} min={100} max={800} />
+    </>
+  );
+}
 
 function Variables() {
   const locals = useDebug((s) => s.locals);
@@ -127,6 +147,7 @@ export function DebugSidebar({ width }: { width?: number }) {
   const hasNlt = useDebug((s) => !!s.nlt.generated);
   return (
     <aside className="dbg-sidebar" style={width ? { width } : undefined}>
+      <CapturePanel />
       {hasNlt && <Blocks />}
       <Variables />
       <CallStack />
