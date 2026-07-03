@@ -9,7 +9,7 @@ const BACKENDS = [
   "@web", "@windows", "@android", "@linux", "@vision",
   "@ssh", "@bash", "@powershell", "@http", "@db",
 ];
-const FLAGS = ["@cache", "@nocache"];
+const FLAGS = ["@cache", "@nocache", "@allow", "@workdir"];
 
 export const NLT_LANG_ID = "nlt";
 
@@ -22,7 +22,8 @@ export function registerNlt(monaco: Monaco): void {
   monaco.languages.setMonarchTokensProvider(NLT_LANG_ID, {
     directives: BACKENDS,
     flags: FLAGS,
-    keywords: ["BEGIN_FUNCTION", "END_FUNCTION", "RUN_FUNCTION", "INCLUDE"],
+    keywords: ["BEGIN_FUNCTION", "END_FUNCTION", "RUN_FUNCTION", "INCLUDE",
+               "BEGIN_PYTHON", "END_PYTHON"],
     verbs: ["EXPECT", "SAVE", "WAIT", "FAIL", "LOG"],
     tokenizer: {
       root: [
@@ -37,7 +38,7 @@ export function registerNlt(monaco: Monaco): void {
             },
           },
         ],
-        [/\b(BEGIN_FUNCTION|END_FUNCTION|RUN_FUNCTION|INCLUDE)\b/, "keyword"],
+        [/\b(BEGIN_FUNCTION|END_FUNCTION|RUN_FUNCTION|INCLUDE|BEGIN_PYTHON|END_PYTHON)\b/, "keyword"],
         [/\b(EXPECT|SAVE|WAIT|FAIL|LOG)\b/, "keyword.verb"],
         [/\$\{\w+\}|\{\{\w+\}\}/, "variable"],
         [/"[^"]*"|'[^']*'/, "string"],

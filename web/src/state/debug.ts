@@ -27,6 +27,10 @@ export interface NltState {
 export function genLineToSource(block: GenBlock, genLine: number): number | null {
   if (!block.lineMap?.length) return null;
   const lines = block.code.split("\n");
+  // BEGIN_PYTHON blocks: the code IS the source — exact 1:1 mapping.
+  if (block.raw && lines.length === block.lineMap.length) {
+    return genLine >= 1 && genLine <= lines.length ? block.lineMap[genLine - 1] : null;
+  }
   let cur: number | null = null;
   for (let i = 0; i < Math.min(genLine, lines.length); i++) {
     const m = lines[i].match(/^\s*#\s*L(\d+)\b/);

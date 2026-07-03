@@ -58,6 +58,8 @@ export interface GenBlock {
   /** 1-based .nlt source line of each instruction line of the block (k-th
    *  instruction → lineMap[k]); used with the `# L<n>` code markers. */
   lineMap?: number[];
+  /** BEGIN_PYTHON block: code is the user's literal Python (1:1 line mapping). */
+  raw?: boolean;
 }
 
 export interface Message<P = Record<string, unknown>> {

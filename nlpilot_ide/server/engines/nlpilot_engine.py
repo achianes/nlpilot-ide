@@ -431,6 +431,7 @@ def generate(source: str, base_dir: str) -> list[dict]:
             "lineStart": b.line_start,
             "lineEnd": b.line_end,
             "lineMap": list(getattr(b, "line_map", ()) or ()),
+            "raw": bool(getattr(b, "raw", False)),
         }
         for b in blocks
     ]
