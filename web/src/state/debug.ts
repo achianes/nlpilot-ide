@@ -40,6 +40,31 @@ export function genLineToSource(block: GenBlock, genLine: number): number | null
   return block.lineMap[cur - 1];
 }
 
+/** Inverse mapping: a 1-based .nlt source line → the first executable generated
+ *  line of that instruction (where a breakpoint can actually fire). */
+export function sourceToGen(block: GenBlock, srcLine: number): number | null {
+  if (!block.lineMap?.length) return null;
+  const lines = block.code.split("\n");
+  const firstExecFrom = (start: number): number | null => {
+    for (let j = start; j < lines.length; j++) {
+      const t = lines[j].trim();
+      if (t && !t.startsWith("#")) return j + 1; // 1-based
+    }
+    return null;
+  };
+  if (block.raw && lines.length === block.lineMap.length) {
+    const k = block.lineMap.indexOf(srcLine);
+    return k < 0 ? null : firstExecFrom(k);
+  }
+  const n = block.lineMap.indexOf(srcLine) + 1; // instruction number for # L<n>
+  if (n <= 0) return null;
+  const re = new RegExp(`^\\s*#\\s*L${n}\\b`);
+  for (let i = 0; i < lines.length; i++) {
+    if (re.test(lines[i])) return firstExecFrom(i + 1);
+  }
+  return null;
+}
+
 interface DebugState {
   status: Status;
   /** a step/continue command is in flight — the target is executing; freeze controls */

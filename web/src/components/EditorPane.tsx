@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import Editor, { type Monaco } from "@monaco-editor/react";
 import { useStore } from "../state/store";
-import { useDebug } from "../state/debug";
+import { genLineToSource, sourceToGen, useDebug } from "../state/debug";
 import { defineNltTheme, langForPath, registerNlt } from "../lang/nlt";
 
 export function EditorPane() {
@@ -48,9 +48,23 @@ export function EditorPane() {
       const line = e.target.position?.lineNumber;
       if (!a || !line) return;
       if (a.endsWith(".nlt")) {
-        const gen = useDebug.getState().nlt.generated;
-        const blk = gen?.find((b) => line >= b.lineStart && line <= b.lineEnd);
-        if (blk) nltToggleBreakpoint(blk.index);
+        const st = useDebug.getState();
+        const gen = st.nlt.generated;
+        if (!gen) {
+          // no mapping yet — tell the user instead of silently ignoring the click
+          useDebug.setState((s) => ({
+            console: [...s.console, { stream: "err", text: "[breakpoint] Generate first (⚙) — breakpoints need the generated code to map lines.\n" }],
+          }));
+          return;
+        }
+        const blk = gen.find((b) => line >= b.lineStart && line <= b.lineEnd);
+        if (!blk) return; // directive/comment/blank line — nothing executable here
+        const gl = sourceToGen(blk, line);
+        if (gl != null) {
+          st.nltToggleLineBreakpoint(blk.index, gl); // exact line breakpoint
+        } else {
+          nltToggleBreakpoint(blk.index); // old cache without markers → block bp
+        }
       } else {
         toggleBreakpoint(a, line);
       }
@@ -73,6 +87,15 @@ export function EditorPane() {
           const b = gen.find((x) => x.index === idx);
           if (b) decos.push({
             range: new monaco.Range(b.lineStart, 1, b.lineStart, 1),
+            options: { glyphMarginClassName: "bp-glyph" },
+          });
+        }
+        // line breakpoints: dot on the exact .nlt line they map back to
+        for (const [idx, gl] of nlt.lineBreakpoints) {
+          const b = gen.find((x) => x.index === idx);
+          const src = b ? genLineToSource(b, gl) : null;
+          if (src) decos.push({
+            range: new monaco.Range(src, 1, src, 1),
             options: { glyphMarginClassName: "bp-glyph" },
           });
         }
@@ -117,7 +140,7 @@ export function EditorPane() {
     }
 
     decoRef.current = editor.deltaDecorations(decoRef.current, decos);
-  }, [breakpoints, paused, active, file?.content, isNlt, nlt.generated, nlt.breakpoints, nlt.activeBlock, nlt.file, nlt.sourceLine]);
+  }, [breakpoints, paused, active, file?.content, isNlt, nlt.generated, nlt.breakpoints, nlt.lineBreakpoints, nlt.activeBlock, nlt.file, nlt.sourceLine]);
 
   if (!file) {
     return (

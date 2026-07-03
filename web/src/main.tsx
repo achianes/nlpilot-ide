@@ -11,7 +11,7 @@ import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import { loader } from "@monaco-editor/react";
 import { App } from "./App";
 import { useStore } from "./state/store";
-import { useDebug } from "./state/debug";
+import { genLineToSource, sourceToGen, useDebug } from "./state/debug";
 import "./styles.css";
 
 // Bundle Monaco locally instead of fetching from the jsdelivr CDN, so the desktop
@@ -21,7 +21,7 @@ self.MonacoEnvironment = { getWorker: () => new editorWorker() };
 loader.config({ monaco });
 
 // Dev handles for debugging the IDE itself from the console.
-(window as any).__ide = { store: useStore, debug: useDebug, monaco };
+(window as any).__ide = { store: useStore, debug: useDebug, monaco, genLineToSource, sourceToGen };
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
