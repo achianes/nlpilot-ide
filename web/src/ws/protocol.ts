@@ -60,6 +60,8 @@ export interface GenBlock {
   lineMap?: number[];
   /** BEGIN_PYTHON block: code is the user's literal Python (1:1 line mapping). */
   raw?: boolean;
+  /** directive argument, e.g. the adb serial from `@android emulator-5554`. */
+  device?: string;
 }
 
 export interface Message<P = Record<string, unknown>> {

@@ -10,7 +10,7 @@ function buildDoc(blocks: GenBlock[]): { text: string; codeStart: Record<number,
   const lines: string[] = [];
   const codeStart: Record<number, number> = {};
   for (const b of blocks) {
-    lines.push(`# ═══ block ${b.index}  @${b.backend}${b.raw ? "  (raw python)" : ""}${b.fromCache ? "  (cached)" : ""}  ·  .nlt L${b.lineStart}-${b.lineEnd}`);
+    lines.push(`# ═══ block ${b.index}  @${b.backend}${b.device ? `(${b.device})` : ""}${b.raw ? "  (raw python)" : ""}${b.fromCache ? "  (cached)" : ""}  ·  .nlt L${b.lineStart}-${b.lineEnd}`);
     codeStart[b.index] = lines.length + 1; // next pushed line is code line 1
     for (const cl of b.code.split("\n")) lines.push(cl);
     lines.push("");
