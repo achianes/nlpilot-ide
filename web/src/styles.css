@@ -229,11 +229,11 @@ button:disabled { background: var(--panel2); color: var(--fg-dim); cursor: defau
 .dbg-status.idle { color: var(--fg-dim); }
 
 /* Monaco breakpoint + current-line decorations */
+.bp-glyph { display: flex !important; align-items: center; justify-content: center; }
 .bp-glyph::after {
   content: "";
-  display: inline-block;
-  width: 10px; height: 10px;
-  margin-left: 4px;
+  display: block;
+  width: 9px; height: 9px;
   border-radius: 50%;
   background: #e51400;
 }

@@ -48,7 +48,8 @@ export function GenView() {
     editorRef.current = editor;
     monacoRef.current = monaco;
     editor.onMouseDown((e: any) => {
-      if (e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) return;
+      const T = monaco.editor.MouseTargetType;
+      if (e.target.type !== T.GUTTER_GLYPH_MARGIN && e.target.type !== T.GUTTER_LINE_NUMBERS) return;
       const line = e.target.position?.lineNumber;
       const idx = line != null ? lineToBlock[line] : undefined;
       if (idx == null || line == null) return;
@@ -134,6 +135,9 @@ export function GenView() {
             fontFamily: "'Cascadia Code', Consolas, monospace",
             minimap: { enabled: false },
             glyphMargin: true,
+            folding: false,
+            lineNumbersMinChars: 3,
+            lineDecorationsWidth: 4,
             automaticLayout: true,
             scrollBeyondLastLine: false,
             lineNumbers: "on",

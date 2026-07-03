@@ -43,7 +43,9 @@ export function EditorPane() {
     // Toggle a breakpoint by clicking the glyph margin. For .nlt, map the clicked
     // line to the block that contains it and toggle a block breakpoint instead.
     editor.onMouseDown((e: any) => {
-      if (e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) return;
+      const T = monaco.editor.MouseTargetType;
+      // toggle on the glyph margin OR the line number — one comfy click target
+      if (e.target.type !== T.GUTTER_GLYPH_MARGIN && e.target.type !== T.GUTTER_LINE_NUMBERS) return;
       const a = useStore.getState().active;
       const line = e.target.position?.lineNumber;
       if (!a || !line) return;
@@ -168,6 +170,9 @@ export function EditorPane() {
         fontFamily: "'Cascadia Code', Consolas, monospace",
         minimap: { enabled: false },
         glyphMargin: true,
+        folding: false,             // no folding gutter — keep the margin tight
+        lineNumbersMinChars: 3,
+        lineDecorationsWidth: 4,
         automaticLayout: true,
         scrollBeyondLastLine: false,
         tabSize: 2,
