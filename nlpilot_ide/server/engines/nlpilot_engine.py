@@ -163,18 +163,30 @@ def _make_hook(send, tracer):
 
         def on_before_exec(self, index, code, namespace):
             self._index = index
-            # capture backend: forward every frozen frame to the IDE video panel
+            # forward visual output to the IDE panel: frozen @capture frames and
+            # every env.screenshot(...) on any backend
             env = namespace.get("env")
-            if env is not None and hasattr(env, "on_frame") \
-                    and not getattr(env, "_ide_frame_hooked", False):
+            if env is not None and not getattr(env, "_ide_frame_hooked", False):
                 import base64
+                import os as _os
 
                 def _send_frame(jpg_bytes):
                     send(("nlt_frame",
                           {"jpeg": base64.b64encode(jpg_bytes).decode("ascii")}))
 
+                def _send_shot(filename, img_bytes):
+                    ext = _os.path.splitext(filename)[1].lower().lstrip(".") or "png"
+                    mime = "jpeg" if ext in ("jpg", "jpeg") else ext
+                    send(("nlt_screenshot", {
+                        "name": _os.path.basename(filename),
+                        "mime": mime,
+                        "b64": base64.b64encode(img_bytes).decode("ascii"),
+                    }))
+
                 try:
-                    env.on_frame = _send_frame
+                    if hasattr(env, "on_frame"):
+                        env.on_frame = _send_frame
+                    env.on_screenshot = _send_shot
                     env._ide_frame_hooked = True
                 except Exception:  # noqa: BLE001
                     pass
@@ -393,6 +405,7 @@ class NlpilotDebugSession:
             "nlt_block_exit": "nlt.blockExit",
             "nlt_run_end": "nlt.runEnd",
             "nlt_frame": "nlt.frame",
+            "nlt_screenshot": "nlt.screenshot",
             "stdout": "stdout",
             "stderr": "stderr",
         }

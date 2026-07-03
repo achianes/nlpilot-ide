@@ -61,6 +61,7 @@ class Evt:
     NLT_BLOCK_EXIT = "nlt.blockExit"   # {index, ok, attempts, error}
     NLT_RUN_END = "nlt.runEnd"         # {}
     NLT_FRAME = "nlt.frame"            # {jpeg}  — b64 JPEG of the frozen capture frame
+    NLT_SCREENSHOT = "nlt.screenshot"  # {name, mime, b64} — any env.screenshot(...)
 
 
 @dataclass
