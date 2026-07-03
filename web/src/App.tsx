@@ -12,6 +12,7 @@ import { DebugSidebar, Console } from "./components/DebugPanels";
 import { GenView } from "./components/GenView";
 import { BusyOverlay } from "./components/BusyOverlay";
 import { StatusBar } from "./components/StatusBar";
+import { DragBar, useSplitSize } from "./components/Split";
 
 export function App() {
   const [connected, setConnected] = useState(false);
@@ -22,6 +23,12 @@ export function App() {
   const ingest = useDebug((s) => s.ingest);
   const nlt = useDebug((s) => s.nlt);
   const showGen = !!nlt.generated;
+
+  // Resizable panes (persisted).
+  const [sidebarW, setSidebarW] = useSplitSize("sidebar", 240);
+  const [genW, setGenW] = useSplitSize("gen", 520);
+  const [consoleH, setConsoleH] = useSplitSize("console", 180);
+  const [dbgW, setDbgW] = useSplitSize("dbg", 280);
 
   useEffect(() => {
     const off = ws.on((msg: Message) => {
@@ -46,7 +53,7 @@ export function App() {
         </span>
       </div>
       <div className="main">
-        <aside className="sidebar">
+        <aside className="sidebar" style={{ width: sidebarW }}>
           <div className="sidebar-head">
             <span>EXPLORER</span>
             <button
@@ -76,6 +83,7 @@ export function App() {
           </div>
           <FileTree />
         </aside>
+        <DragBar dir="v" size={sidebarW} setSize={setSidebarW} min={140} max={600} />
         <section className="editor-area">
           <Tabs />
           {nlt.stale && (
@@ -88,17 +96,22 @@ export function App() {
               <EditorPane />
             </div>
             {showGen && (
-              <div className="gen-pane">
-                <GenView />
-              </div>
+              <>
+                <DragBar dir="v" size={genW} setSize={setGenW} invert min={200} max={1400} />
+                <div className="gen-pane" style={{ width: genW, flex: "0 0 auto" }}>
+                  <GenView />
+                </div>
+              </>
             )}
           </div>
           <StatusBar />
-          <div className="console-strip">
+          <DragBar dir="h" size={consoleH} setSize={setConsoleH} invert min={60} max={700} />
+          <div className="console-strip" style={{ height: consoleH }}>
             <Console />
           </div>
         </section>
-        <DebugSidebar />
+        <DragBar dir="v" size={dbgW} setSize={setDbgW} invert min={160} max={700} />
+        <DebugSidebar width={dbgW} />
       </div>
       {nlt.status === "generating" && (
         <BusyOverlay

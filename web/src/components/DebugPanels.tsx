@@ -123,10 +123,10 @@ function Blocks() {
   );
 }
 
-export function DebugSidebar() {
+export function DebugSidebar({ width }: { width?: number }) {
   const hasNlt = useDebug((s) => !!s.nlt.generated);
   return (
-    <aside className="dbg-sidebar">
+    <aside className="dbg-sidebar" style={width ? { width } : undefined}>
       {hasNlt && <Blocks />}
       <Variables />
       <CallStack />

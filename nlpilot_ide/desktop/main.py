@@ -55,7 +55,10 @@ def main() -> None:
     if not _wait_for_server():
         raise RuntimeError("backend did not start in time")
     api = _Api()
-    window = webview.create_window("nlpilot-ide", _URL, width=1400, height=900, js_api=api)
+    window = webview.create_window(
+        "nlpilot-ide", _URL, width=1400, height=900, js_api=api,
+        text_select=True,  # allow selecting/copying console output etc.
+    )
     api.window = window
     webview.start()
 

@@ -148,6 +148,12 @@ button:disabled { background: var(--panel2); color: var(--fg-dim); cursor: defau
   padding: 5px 12px; border-bottom: 1px solid var(--border);
 }
 
+/* draggable pane dividers */
+.dragbar { flex: 0 0 auto; background: transparent; transition: background 0.15s; z-index: 5; }
+.dragbar:hover, .dragbar:active { background: var(--accent); }
+.dragbar-v { width: 5px; cursor: col-resize; margin: 0 -2px; }
+.dragbar-h { height: 5px; cursor: row-resize; margin: -2px 0; }
+
 /* status bar (debug narrative) */
 .statusbar {
   display: flex; align-items: center; gap: 8px;
@@ -298,6 +304,8 @@ button:disabled { background: var(--panel2); color: var(--fg-dim); cursor: defau
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-all;
+  user-select: text;   /* console output must be selectable/copyable */
+  cursor: text;
 }
 .cstd { color: var(--fg); }
 .cerr { color: var(--err); }
