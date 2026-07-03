@@ -66,3 +66,5 @@ node_modules/
 # Debug run artifacts
 examples/results.png
 *.png
+# …but README screenshots are tracked
+!docs/*.png
