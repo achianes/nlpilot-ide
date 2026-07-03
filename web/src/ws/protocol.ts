@@ -16,6 +16,8 @@ export const Cmd = {
   NLT_RUN: "nlt.run",
   NLT_SET_BREAKPOINT: "nlt.setBreakpoint",
   NLT_CLEAR_BREAKPOINT: "nlt.clearBreakpoint",
+  NLT_SET_LINE_BP: "nlt.setLineBreakpoint",
+  NLT_CLEAR_LINE_BP: "nlt.clearLineBreakpoint",
 } as const;
 
 export const Evt = {
@@ -53,6 +55,9 @@ export interface GenBlock {
   fromCache: boolean;
   lineStart: number;
   lineEnd: number;
+  /** 1-based .nlt source line of each instruction line of the block (k-th
+   *  instruction → lineMap[k]); used with the `# L<n>` code markers. */
+  lineMap?: number[];
 }
 
 export interface Message<P = Record<string, unknown>> {

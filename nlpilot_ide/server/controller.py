@@ -64,6 +64,12 @@ class DebugController:
         if t == Cmd.NLT_CLEAR_BREAKPOINT and self.nlt:
             self.nlt.remove_breakpoint(int(p["index"]))
             return None
+        if t == Cmd.NLT_SET_LINE_BP and self.nlt:
+            self.nlt.add_line_breakpoint(int(p["index"]), int(p["line"]))
+            return None
+        if t == Cmd.NLT_CLEAR_LINE_BP and self.nlt:
+            self.nlt.remove_line_breakpoint(int(p["index"]), int(p["line"]))
+            return None
         if t == Cmd.INPUT_RESPONSE and self.session:
             self.session.input_response(p.get("id", ""), p.get("text", ""))
             return None
@@ -76,7 +82,8 @@ class DebugController:
             return None
 
         if t in (Cmd.SET_BREAKPOINT, Cmd.CLEAR_BREAKPOINT, Cmd.NLT_SET_BREAKPOINT,
-                 Cmd.NLT_CLEAR_BREAKPOINT, Cmd.INPUT_RESPONSE):
+                 Cmd.NLT_CLEAR_BREAKPOINT, Cmd.NLT_SET_LINE_BP, Cmd.NLT_CLEAR_LINE_BP,
+                 Cmd.INPUT_RESPONSE):
             return None  # no active session; ignore silently
 
         return Message(Evt.ERROR, {"reason": f"unknown command: {t}"})
@@ -108,6 +115,7 @@ class DebugController:
             source=source,
             base_dir=os.path.dirname(abs_path),
             breakpoints={int(x) for x in p.get("breakpoints", [])},
+            line_breakpoints={(int(a), int(b)) for a, b in p.get("lineBreakpoints", [])},
         )
         self.nlt.start()
         return Message(Evt.NLT_RUN_START, {"path": rel})

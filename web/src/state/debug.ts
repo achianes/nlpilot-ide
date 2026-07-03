@@ -14,9 +14,26 @@ export interface NltState {
   generated: GenBlock[] | null; // compiled blocks (read-only view source)
   activeBlock: number | null;   // block currently entered/paused
   genLine: number | null;       // 1-based line within the active block's code
+  sourceLine: number | null;    // exact .nlt line for genLine (via # L<n> markers)
   blocks: Record<number, NltBlockState>;
   breakpoints: number[];        // block indices
+  lineBreakpoints: [number, number][]; // (block index, 1-based gen line)
   stale: boolean;               // .nlt edited since last generate/run
+}
+
+/** Map a 1-based generated-code line to its .nlt source line using the
+ *  `# L<n>` markers the compiler asks the model to emit. null = unknown
+ *  (old cache entries without markers) → callers fall back to the block span. */
+export function genLineToSource(block: GenBlock, genLine: number): number | null {
+  if (!block.lineMap?.length) return null;
+  const lines = block.code.split("\n");
+  let cur: number | null = null;
+  for (let i = 0; i < Math.min(genLine, lines.length); i++) {
+    const m = lines[i].match(/^\s*#\s*L(\d+)\b/);
+    if (m) cur = parseInt(m[1], 10);
+  }
+  if (cur == null || cur < 1 || cur > block.lineMap.length) return null;
+  return block.lineMap[cur - 1];
 }
 
 interface DebugState {
@@ -46,12 +63,14 @@ interface DebugState {
   nltGenerate: () => void;
   nltRun: () => void;
   nltToggleBreakpoint: (index: number) => void;
+  nltToggleLineBreakpoint: (index: number, line: number) => void;
   nltMarkStale: (path: string) => void;
 }
 
 const emptyNlt: NltState = {
   file: null, status: "idle", generated: null, activeBlock: null,
-  genLine: null, blocks: {}, breakpoints: [], stale: false,
+  genLine: null, sourceLine: null, blocks: {}, breakpoints: [],
+  lineBreakpoints: [], stale: false,
 };
 
 // Debug pressed while the generated view was stale/missing: regenerate first,
@@ -133,13 +152,17 @@ export const useDebug = create<DebugState>((set, get) => ({
           const file = get().nlt.file;
           if (file) {
             set((s) => ({ nlt: { ...s.nlt, blocks: {} }, console: [] }));
-            ws.send(Cmd.NLT_RUN, { path: file, breakpoints: get().nlt.breakpoints });
+            ws.send(Cmd.NLT_RUN, {
+              path: file,
+              breakpoints: get().nlt.breakpoints,
+              lineBreakpoints: get().nlt.lineBreakpoints,
+            });
           }
         }
         break;
       }
       case Evt.NLT_RUN_START:
-        set((s) => ({ nlt: { ...s.nlt, status: "running", activeBlock: null, genLine: null, blocks: {} }, console: [] }));
+        set((s) => ({ nlt: { ...s.nlt, status: "running", activeBlock: null, genLine: null, sourceLine: null, blocks: {} }, console: [] }));
         break;
       case Evt.NLT_BLOCK_ENTER: {
         const { index, backend } = m.payload as { index: number; backend: string };
@@ -164,8 +187,10 @@ export const useDebug = create<DebugState>((set, get) => ({
       case Evt.NLT_LINE: {
         const { index, genLine, locals } = m.payload as
           { index: number; genLine: number; locals: Record<string, string> };
+        const blk = get().nlt.generated?.find((b) => b.index === index);
+        const sourceLine = blk ? genLineToSource(blk, genLine) : null;
         set((s) => ({
-          nlt: { ...s.nlt, status: "paused", activeBlock: index, genLine },
+          nlt: { ...s.nlt, status: "paused", activeBlock: index, genLine, sourceLine },
           stepping: false,
           locals: locals ?? {},
         }));
@@ -193,7 +218,7 @@ export const useDebug = create<DebugState>((set, get) => ({
       }
       case Evt.NLT_RUN_END:
         set((s) => ({
-          nlt: { ...s.nlt, status: "idle", activeBlock: null, genLine: null },
+          nlt: { ...s.nlt, status: "idle", activeBlock: null, genLine: null, sourceLine: null },
           stepping: false,
         }));
         break;
@@ -219,7 +244,7 @@ export const useDebug = create<DebugState>((set, get) => ({
   },
   stop: () => {
     ws.send(Cmd.STOP);
-    set((s) => ({ nlt: { ...s.nlt, status: "idle", activeBlock: null, genLine: null }, stepping: false }));
+    set((s) => ({ nlt: { ...s.nlt, status: "idle", activeBlock: null, genLine: null, sourceLine: null }, stepping: false }));
   },
   cont: () => { set({ stepping: true }); ws.send(Cmd.CONTINUE); },
   stepOver: () => { set({ stepping: true }); ws.send(Cmd.STEP_OVER); },
@@ -248,7 +273,11 @@ export const useDebug = create<DebugState>((set, get) => ({
       return;
     }
     set((s) => ({ nlt: { ...s.nlt, file: active, blocks: {}, stale: false }, console: [] }));
-    ws.send(Cmd.NLT_RUN, { path: active, breakpoints: get().nlt.breakpoints });
+    ws.send(Cmd.NLT_RUN, {
+      path: active,
+      breakpoints: get().nlt.breakpoints,
+      lineBreakpoints: get().nlt.lineBreakpoints,
+    });
   },
   nltToggleBreakpoint: (index) => {
     const cur = get().nlt.breakpoints;
@@ -259,11 +288,22 @@ export const useDebug = create<DebugState>((set, get) => ({
       ws.send(has ? Cmd.NLT_CLEAR_BREAKPOINT : Cmd.NLT_SET_BREAKPOINT, { index });
     }
   },
+  nltToggleLineBreakpoint: (index, line) => {
+    const cur = get().nlt.lineBreakpoints;
+    const has = cur.some(([i, l]) => i === index && l === line);
+    const next: [number, number][] = has
+      ? cur.filter(([i, l]) => !(i === index && l === line))
+      : [...cur, [index, line] as [number, number]];
+    set((s) => ({ nlt: { ...s.nlt, lineBreakpoints: next } }));
+    if (get().nlt.status !== "idle") {
+      ws.send(has ? Cmd.NLT_CLEAR_LINE_BP : Cmd.NLT_SET_LINE_BP, { index, line });
+    }
+  },
   nltMarkStale: (path) => {
     const n = get().nlt;
     if (n.file === path && (n.status === "running" || n.status === "paused")) {
       ws.send(Cmd.STOP);
-      set((s) => ({ nlt: { ...s.nlt, status: "idle", activeBlock: null, genLine: null, stale: true } }));
+      set((s) => ({ nlt: { ...s.nlt, status: "idle", activeBlock: null, genLine: null, sourceLine: null, stale: true } }));
     } else if (n.file === path && n.generated) {
       // generated view no longer matches the edited source
       set((s) => ({ nlt: { ...s.nlt, stale: true } }));

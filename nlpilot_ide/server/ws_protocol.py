@@ -29,6 +29,8 @@ class Cmd:
     NLT_RUN = "nlt.run"                     # {path, breakpoints:[int]}  (block indices)
     NLT_SET_BREAKPOINT = "nlt.setBreakpoint"    # {index}
     NLT_CLEAR_BREAKPOINT = "nlt.clearBreakpoint"  # {index}
+    NLT_SET_LINE_BP = "nlt.setLineBreakpoint"     # {index, line}  (line within block code)
+    NLT_CLEAR_LINE_BP = "nlt.clearLineBreakpoint"  # {index, line}
 
 
 # ---- events: server -> client ----

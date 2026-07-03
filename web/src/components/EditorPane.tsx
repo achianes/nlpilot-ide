@@ -79,11 +79,23 @@ export function EditorPane() {
         if (nlt.file === active && nlt.activeBlock != null) {
           const b = gen.find((x) => x.index === nlt.activeBlock);
           if (b) {
+            // light highlight on the whole block span…
             decos.push({
               range: new monaco.Range(b.lineStart, 1, b.lineEnd, 1),
-              options: { isWholeLine: true, className: "current-block", glyphMarginClassName: "current-glyph" },
+              options: { isWholeLine: true, className: "current-block" },
             });
-            editor.revealLineInCenterIfOutsideViewport(b.lineStart);
+            // …and, when the # L<n> markers resolve it, a strong highlight on
+            // the EXACT source line being executed.
+            const line = nlt.sourceLine ?? b.lineStart;
+            decos.push({
+              range: new monaco.Range(line, 1, line, 1),
+              options: {
+                isWholeLine: true,
+                className: nlt.sourceLine ? "current-line" : "",
+                glyphMarginClassName: "current-glyph",
+              },
+            });
+            editor.revealLineInCenterIfOutsideViewport(line);
           }
         }
       }
@@ -105,7 +117,7 @@ export function EditorPane() {
     }
 
     decoRef.current = editor.deltaDecorations(decoRef.current, decos);
-  }, [breakpoints, paused, active, file?.content, isNlt, nlt.generated, nlt.breakpoints, nlt.activeBlock, nlt.file]);
+  }, [breakpoints, paused, active, file?.content, isNlt, nlt.generated, nlt.breakpoints, nlt.activeBlock, nlt.file, nlt.sourceLine]);
 
   if (!file) {
     return (

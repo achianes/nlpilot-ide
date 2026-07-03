@@ -33,7 +33,8 @@ export function StatusBar() {
       text = `executing ${blkLabel}${secs > 0 ? ` — ${secs}s` : ""}… target is running (browser/app may be busy)`;
     } else if (nlt.status === "paused") {
       cls = "paused";
-      text = `paused — ${blkLabel}, generated line ${nlt.genLine ?? "?"} · step or continue`;
+      const src = nlt.sourceLine ? ` = .nlt line ${nlt.sourceLine}` : "";
+      text = `paused — ${blkLabel}, generated line ${nlt.genLine ?? "?"}${src} · step or continue`;
     } else {
       cls = "exec";
       text = `running ${blkLabel}${secs > 0 ? ` — ${secs}s` : ""}…`;

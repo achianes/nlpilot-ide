@@ -40,11 +40,14 @@ class GenTracer:
     (run until the current frame returns). Commands drive transitions.
     """
 
-    def __init__(self, emit, get_command, current_index, breakpoints):
+    def __init__(self, emit, get_command, current_index, breakpoints,
+                 line_breakpoints=None):
         self.emit = emit                    # emit(event_type, payload_dict)
         self.get_command = get_command      # blocking () -> (cmd, arg)
         self.current_index = current_index  # callable () -> active block index
         self.breakpoints = breakpoints      # set[int] of block indices to break on
+        # set[(block_index, gen_line)] — breakpoints on specific generated lines
+        self.line_breakpoints = line_breakpoints if line_breakpoints is not None else set()
         self.mode = "run"
         self.stopframe = None
         self.quitting = False
@@ -70,6 +73,9 @@ class GenTracer:
         return self.trace
 
     def _should_stop(self, frame) -> bool:
+        # a breakpoint on this exact generated line stops in ANY mode
+        if (self.current_index(), frame.f_lineno) in self.line_breakpoints:
+            return True
         if self.mode == "step":
             return True
         if self.mode == "next":
@@ -149,6 +155,7 @@ def _make_hook(send, tracer):
                 "backend": block.backend,
                 "lineStart": block.line_start,
                 "lineEnd": block.line_end,
+                "lineMap": list(getattr(block, "line_map", ()) or ()),
             }))
 
         def on_compile(self, index, code, from_cache):
@@ -191,7 +198,9 @@ def _make_hook(send, tracer):
 # ---------------------------------------------------------------------------
 # subprocess entry
 # ---------------------------------------------------------------------------
-def _nlpilot_process_main(source, base_dir, cmd_conn, io_conn, breakpoints):
+def _nlpilot_process_main(source, base_dir, cmd_conn, io_conn, breakpoints,
+                          line_breakpoints=None):
+    line_breakpoints = line_breakpoints if line_breakpoints is not None else set()
     # Redirect stdout/stderr onto the SAME pipe as the debug events, so console
     # output and block enter/exit arrive in true execution order (two pipes
     # would race and e.g. show a PASS line after its block's exit marker).
@@ -227,6 +236,10 @@ def _nlpilot_process_main(source, base_dir, cmd_conn, io_conn, breakpoints):
                 breakpoints.add(int(arg))
             elif cmd == "remove_block_breakpoint":
                 breakpoints.discard(int(arg))
+            elif cmd == "add_line_breakpoint":
+                line_breakpoints.add((int(arg[0]), int(arg[1])))
+            elif cmd == "remove_line_breakpoint":
+                line_breakpoints.discard((int(arg[0]), int(arg[1])))
             else:
                 cmd_queue.put((cmd, arg))
 
@@ -246,7 +259,7 @@ def _nlpilot_process_main(source, base_dir, cmd_conn, io_conn, breakpoints):
         return cmd_queue.get()
 
     tracer = GenTracer(emit, get_command, current_index=lambda: hook.current_index(),
-                       breakpoints=breakpoints)
+                       breakpoints=breakpoints, line_breakpoints=line_breakpoints)
 
     threading.Thread(target=reader, daemon=True).start()
 
@@ -286,10 +299,12 @@ def _nlpilot_process_main(source, base_dir, cmd_conn, io_conn, breakpoints):
 # parent-side session
 # ---------------------------------------------------------------------------
 class NlpilotDebugSession:
-    def __init__(self, source: str, base_dir: str, breakpoints: set[int] | None):
+    def __init__(self, source: str, base_dir: str, breakpoints: set[int] | None,
+                 line_breakpoints: set | None = None):
         self.source = source
         self.base_dir = base_dir
         self._breakpoints = set(breakpoints or set())
+        self._line_breakpoints = {tuple(x) for x in (line_breakpoints or set())}
         self.proc: Process | None = None
         self.cmd_conn = None
         self.io_conn = None
@@ -300,7 +315,8 @@ class NlpilotDebugSession:
         parent_io, child_io = Pipe()
         self.proc = Process(
             target=_nlpilot_process_main,
-            args=(self.source, self.base_dir, child_cmd, child_io, self._breakpoints),
+            args=(self.source, self.base_dir, child_cmd, child_io,
+                  self._breakpoints, self._line_breakpoints),
             name="NlpilotDebug",
             daemon=True,
         )
@@ -326,6 +342,12 @@ class NlpilotDebugSession:
 
     def remove_breakpoint(self, index: int) -> None:
         self.send("remove_block_breakpoint", int(index))
+
+    def add_line_breakpoint(self, index: int, line: int) -> None:
+        self.send("add_line_breakpoint", (int(index), int(line)))
+
+    def remove_line_breakpoint(self, index: int, line: int) -> None:
+        self.send("remove_line_breakpoint", (int(index), int(line)))
 
     def poll_messages(self) -> list[dict]:
         out: list[dict] = []
@@ -408,6 +430,7 @@ def generate(source: str, base_dir: str) -> list[dict]:
             "fromCache": b.from_cache,
             "lineStart": b.line_start,
             "lineEnd": b.line_end,
+            "lineMap": list(getattr(b, "line_map", ()) or ()),
         }
         for b in blocks
     ]

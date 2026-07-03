@@ -10,7 +10,7 @@ from collections import deque
 from nlpilot_ide.server.engines.nlpilot_engine import GEN_FILE, GenTracer
 
 
-def _run(src, commands, breakpoints={0}):
+def _run(src, commands, breakpoints={0}, line_breakpoints=None):
     emitted = []
     cmds = deque(commands)
 
@@ -21,7 +21,9 @@ def _run(src, commands, breakpoints={0}):
     def get_command():
         return (cmds.popleft() if cmds else "continue", None)
 
-    tracer = GenTracer(emit, get_command, current_index=lambda: 0, breakpoints=set(breakpoints))
+    tracer = GenTracer(emit, get_command, current_index=lambda: 0,
+                       breakpoints=set(breakpoints),
+                       line_breakpoints=set(line_breakpoints or set()))
     tracer.block_started()
     code = compile(src, GEN_FILE, "exec")
     ns = {}
@@ -64,6 +66,14 @@ def test_no_breakpoint_runs_straight_through():
     src = "a = 1\nb = 2\n"
     lines = _run(src, [], breakpoints=set())
     assert lines == []
+
+
+def test_line_breakpoint_stops_in_run_mode():
+    # No block breakpoint (mode stays 'run'); a line breakpoint on gen line 3
+    # still pauses there, and continue runs to the end.
+    src = "a = 1\nb = 2\nc = 3\nd = 4\n"
+    lines = _run(src, ["continue"], breakpoints=set(), line_breakpoints={(0, 3)})
+    assert lines == [3]
 
 
 def test_stop_aborts():

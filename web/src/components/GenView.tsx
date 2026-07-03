@@ -21,6 +21,7 @@ function buildDoc(blocks: GenBlock[]): { text: string; codeStart: Record<number,
 export function GenView() {
   const nlt = useDebug((s) => s.nlt);
   const nltToggleBp = useDebug((s) => s.nltToggleBreakpoint);
+  const nltToggleLineBp = useDebug((s) => s.nltToggleLineBreakpoint);
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<Monaco | null>(null);
   const decoRef = useRef<string[]>([]);
@@ -47,10 +48,15 @@ export function GenView() {
     editorRef.current = editor;
     monacoRef.current = monaco;
     editor.onMouseDown((e: any) => {
-      if (e.target.type === monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) {
-        const line = e.target.position?.lineNumber;
-        const idx = line != null ? lineToBlock[line] : undefined;
-        if (idx != null) nltToggleBp(idx);
+      if (e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN) return;
+      const line = e.target.position?.lineNumber;
+      const idx = line != null ? lineToBlock[line] : undefined;
+      if (idx == null || line == null) return;
+      const start = codeStart[idx];
+      if (line < start) {
+        nltToggleBp(idx); // header line → block breakpoint
+      } else {
+        nltToggleLineBp(idx, line - start + 1); // code line → line breakpoint
       }
     });
   }
@@ -72,6 +78,17 @@ export function GenView() {
       }
     }
 
+    // line breakpoints inside generated code
+    for (const [idx, line] of nlt.lineBreakpoints) {
+      const start = codeStart[idx];
+      if (start) {
+        decos.push({
+          range: new monaco.Range(start + line - 1, 1, start + line - 1, 1),
+          options: { glyphMarginClassName: "bp-glyph" },
+        });
+      }
+    }
+
     // current generated line (dual-view highlight, gen side)
     if (nlt.status === "paused" && nlt.activeBlock != null && nlt.genLine != null) {
       const start = codeStart[nlt.activeBlock];
@@ -86,7 +103,7 @@ export function GenView() {
     }
 
     decoRef.current = editor.deltaDecorations(decoRef.current, decos);
-  }, [nlt.status, nlt.activeBlock, nlt.genLine, nlt.breakpoints, codeStart]);
+  }, [nlt.status, nlt.activeBlock, nlt.genLine, nlt.breakpoints, nlt.lineBreakpoints, codeStart]);
 
   if (!nlt.generated) {
     return (
