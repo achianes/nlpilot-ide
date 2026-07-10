@@ -21,7 +21,9 @@ self.MonacoEnvironment = { getWorker: () => new editorWorker() };
 loader.config({ monaco });
 
 // Dev handles for debugging the IDE itself from the console.
-(window as any).__ide = { store: useStore, debug: useDebug, monaco, genLineToSource, genLineToSourceSpan, sourceToGen };
+import * as blocks from "./blocks/nltBlocks";
+import * as BlocklyNS from "blockly";
+(window as any).__ide = { store: useStore, debug: useDebug, monaco, genLineToSource, genLineToSourceSpan, sourceToGen, blocks, Blockly: BlocklyNS };
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

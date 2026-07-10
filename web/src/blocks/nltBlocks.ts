@@ -2,6 +2,7 @@
 // generator that turns a Blockly workspace into .nlt text.
 
 import * as Blockly from "blockly";
+import { registerMultilineField } from "./multilineField";
 
 export const BACKENDS = [
   "web", "windows", "linux", "android", "vision",
@@ -23,6 +24,10 @@ let defined = false;
 export function defineNltBlocks(): void {
   if (defined) return;
   defined = true;
+
+  // Blockly 13 core no longer ships FieldMultilineText — register our own so the
+  // Python block keeps its newlines.
+  registerMultilineField();
 
   Blockly.defineBlocksWithJsonArray([
     // ---- backends ----
@@ -99,7 +104,59 @@ export function defineNltBlocks(): void {
       ],
       previousStatement: null, nextStatement: null, colour: C.action,
     },
+    {
+      type: "nlt_print",
+      message0: "print %1",
+      args0: [{ type: "field_input", name: "TEXT", text: "done" }],
+      previousStatement: null, nextStatement: null, colour: C.action,
+    },
+    {
+      type: "nlt_scroll",
+      message0: "scroll %1",
+      args0: [{ type: "field_dropdown", name: "DIR",
+               options: [["down", "down"], ["up", "up"], ["top", "top"], ["bottom", "bottom"]] }],
+      previousStatement: null, nextStatement: null, colour: C.action,
+    },
+    {
+      type: "nlt_swipe",
+      message0: "swipe %1",
+      args0: [{ type: "field_dropdown", name: "DIR",
+               options: [["up", "up"], ["down", "down"], ["left", "left"], ["right", "right"]] }],
+      previousStatement: null, nextStatement: null, colour: C.action,
+    },
+    {
+      type: "nlt_key",
+      message0: "press key %1",
+      args0: [{ type: "field_dropdown", name: "KEY",
+               options: [["back", "back"], ["home", "home"], ["enter", "enter"], ["recent", "recent"]] }],
+      previousStatement: null, nextStatement: null, colour: C.action,
+    },
+    {
+      type: "nlt_http_get",
+      message0: "HTTP GET %1",
+      args0: [{ type: "field_input", name: "URL", text: "https://api.example.com/x" }],
+      previousStatement: null, nextStatement: null, colour: C.action,
+    },
+    {
+      type: "nlt_ssh_run",
+      message0: "run command %1",
+      args0: [{ type: "field_input", name: "CMD", text: "uptime" }],
+      previousStatement: null, nextStatement: null, colour: C.action,
+      tooltip: "Run a shell command (ssh/bash/powershell backends).",
+    },
+    {
+      type: "nlt_db_query",
+      message0: "SQL query %1",
+      args0: [{ type: "field_input", name: "SQL", text: "SELECT count(*) FROM users" }],
+      previousStatement: null, nextStatement: null, colour: C.action,
+    },
     // ---- checks ----
+    {
+      type: "nlt_expect_contains",
+      message0: "EXPECT page contains %1",
+      args0: [{ type: "field_input", name: "TEXT", text: "Welcome" }],
+      previousStatement: null, nextStatement: null, colour: C.check,
+    },
     {
       type: "nlt_expect",
       message0: "EXPECT that %1",
@@ -209,9 +266,10 @@ export function defineNltBlocks(): void {
     {
       type: "nlt_python",
       message0: "python %1",
-      args0: [{ type: "field_input", name: "CODE", text: "env.log('hello')" }],
+      args0: [{ type: "field_multilinetext", name: "CODE",
+                text: "total = 0\nfor i in range(3):\n    total += i\nenv.log(total)" }],
       previousStatement: null, nextStatement: null, colour: C.advanced,
-      tooltip: "One line of literal Python (BEGIN_PYTHON block).",
+      tooltip: "Multi-line literal Python (BEGIN_PYTHON block), run verbatim.",
     },
     {
       type: "nlt_comment",
@@ -280,11 +338,14 @@ export const TOOLBOX = {
       { kind: "block", type: "nlt_backend" },
     ]},
     { kind: "category", name: "Actions", colour: `${C.action}`, contents: [
-      "nlt_instruction", "nlt_goto", "nlt_type", "nlt_click", "nlt_wait",
-      "nlt_screenshot", "nlt_app_start", "nlt_unlock", "nlt_save",
+      "nlt_instruction", "nlt_goto", "nlt_type", "nlt_click", "nlt_print",
+      "nlt_wait", "nlt_screenshot", "nlt_scroll", "nlt_swipe", "nlt_key",
+      "nlt_app_start", "nlt_unlock", "nlt_save",
+      "nlt_http_get", "nlt_ssh_run", "nlt_db_query",
     ].map((t) => ({ kind: "block", type: t }))},
     { kind: "category", name: "Checks", colour: `${C.check}`, contents: [
       { kind: "block", type: "nlt_expect" },
+      { kind: "block", type: "nlt_expect_contains" },
       { kind: "block", type: "nlt_if" },
     ]},
     { kind: "category", name: "Control", colour: `${C.check}`, contents: [
@@ -305,50 +366,36 @@ export const TOOLBOX = {
   ],
 };
 
-// ---- generator: one block -> .nlt line(s) ----
+// ---- generator: workspace -> structured, multi-line .nlt with a block map ----
 
-/** Flatten a nested statement chain into "step, then step, then step". */
-function chainText(first: Blockly.Block | null): string {
-  const parts: string[] = [];
-  let b = first;
-  while (b) {
-    const l = lineOf(b).replace(/\n+/g, " ").trim();
-    if (l) parts.push(l.replace(/\.$/, ""));
-    b = b.getNextBlock();
-  }
-  return parts.join(", then ");
-}
+const PAD = (n: number) => "  ".repeat(n);
 
-function lineOf(b: Blockly.Block): string {
+/** Single-block .nlt for a LEAF block (control/python handled by renderBlock). */
+function leafLine(b: Blockly.Block): string {
   const v = (n: string) => String(b.getFieldValue(n) ?? "").trim();
-  // user-defined blocks: fill the template's {FIELD} placeholders
   const tpl = customTemplates[b.type];
   if (tpl) return tpl.replace(/\{(\w+)\}/g, (_, f) => v(f));
   switch (b.type) {
-    case "nlt_if_c": {
-      const doTxt = chainText(b.getInputTargetBlock("DO")) || "do nothing";
-      const elseTxt = chainText(b.getInputTargetBlock("ELSE"));
-      return `If ${v("COND")}: ${doTxt}${elseTxt ? `. Otherwise: ${elseTxt}` : ""}`;
-    }
-    case "nlt_repeat":
-      return `Repeat ${v("N")} times: ${chainText(b.getInputTargetBlock("DO")) || "do nothing"}`;
-    case "nlt_repeat_until":
-      return `Repeat until ${v("COND")}: ${chainText(b.getInputTargetBlock("DO")) || "do nothing"}`;
-    case "nlt_backend": {
-      const dev = v("DEVICE");
-      return `\n@${v("BACKEND")}${dev ? " " + dev : ""}`;
-    }
+    case "nlt_backend": { const d = v("DEVICE"); return `\n@${v("BACKEND")}${d ? " " + d : ""}`; }
     case "nlt_instruction": return v("TEXT");
     case "nlt_goto": return `Go to ${v("URL")}`;
     case "nlt_type":
       return `Type "${v("TEXT")}" into ${v("FIELD")}${b.getFieldValue("ENTER") === "TRUE" ? " and press enter" : ""}`;
     case "nlt_click": return `Click ${v("TARGET")}`;
+    case "nlt_print": return `Print "${v("TEXT")}"`;
     case "nlt_wait": return `Wait ${v("SECS")} seconds`;
+    case "nlt_scroll": return `Scroll ${v("DIR")}`;
+    case "nlt_swipe": return `Swipe ${v("DIR")}`;
+    case "nlt_key": return `Press the ${v("KEY")} key`;
     case "nlt_screenshot": return `Take a screenshot of the screen and save it to "${v("FILE")}"`;
     case "nlt_app_start": return `Start the app with package "${v("PKG")}"`;
     case "nlt_unlock": return v("PIN") ? `Unlock the phone with the PIN ${v("PIN")}` : "Unlock the phone";
     case "nlt_save": return `Save the text "${v("TEXT")}" to the file "${v("FILE")}"`;
+    case "nlt_http_get": return `GET ${v("URL")}`;
+    case "nlt_ssh_run": return `Run the command "${v("CMD")}" and print the output`;
+    case "nlt_db_query": return `Run the SQL query "${v("SQL")}" and log the result`;
     case "nlt_expect": return `EXPECT that ${v("COND")}`;
+    case "nlt_expect_contains": return `EXPECT that the page contains the text "${v("TEXT")}"`;
     case "nlt_if": return `If ${v("COND")}: ${v("THEN")}. Otherwise ${v("ELSE")}`;
     case "nlt_ask": return `Ask the LLM to ${v("Q")} and print the answer`;
     case "nlt_ask_image": return `Ask the vision model about the image "${v("FILE")}": ${v("Q")}, and print the answer`;
@@ -359,20 +406,83 @@ function lineOf(b: Blockly.Block): string {
     case "nlt_channel": return `Tune to channel ${v("N")}`;
     case "nlt_allow": return `\n@allow ${v("MODS")}`.trimEnd();
     case "nlt_workdir": return `\n@workdir ${v("DIR")}`.trimEnd();
-    case "nlt_python": return `BEGIN_PYTHON\n${v("CODE")}\nEND_PYTHON`;
     case "nlt_comment": return `# ${v("TEXT")}`;
     default: return "";
   }
 }
 
+interface Rendered { lines: string[]; spans: { id: string; start: number; end: number }[] }
+
+/** Render a block (recursively for control containers) at an indent level.
+ *  spans are 0-based line indices within the returned `lines`. */
+function renderBlock(b: Blockly.Block, indent: number): Rendered {
+  const pad = PAD(indent);
+  const v = (n: string) => String(b.getFieldValue(n) ?? "").trim();
+
+  const container = (header: string, inputs: [string, string?][]): Rendered => {
+    const lines = [header];
+    const spans: Rendered["spans"] = [];
+    for (const [name, sub] of inputs) {
+      if (sub) lines.push(`${pad}${sub}`);
+      const child = renderChain(b.getInputTargetBlock(name), indent + 1);
+      if (!child.lines.length) lines.push(`${PAD(indent + 1)}do nothing`);
+      const off = lines.length;
+      child.spans.forEach((s) => spans.push({ id: s.id, start: s.start + off, end: s.end + off }));
+      lines.push(...child.lines);
+    }
+    spans.unshift({ id: b.id, start: 0, end: lines.length - 1 });
+    return { lines, spans };
+  };
+
+  if (b.type === "nlt_if_c") {
+    const hasElse = !!b.getInputTargetBlock("ELSE");
+    return container(`${pad}If ${v("COND")}:`,
+      hasElse ? [["DO"], ["ELSE", "Otherwise:"]] : [["DO"]]);
+  }
+  if (b.type === "nlt_repeat") return container(`${pad}Repeat ${v("N")} times:`, [["DO"]]);
+  if (b.type === "nlt_repeat_until") return container(`${pad}Repeat until ${v("COND")}:`, [["DO"]]);
+  if (b.type === "nlt_python") {
+    const body = String(b.getFieldValue("CODE") ?? "").split("\n");
+    const lines = [`${pad}BEGIN_PYTHON`, ...body.map((l) => pad + l), `${pad}END_PYTHON`];
+    return { lines, spans: [{ id: b.id, start: 0, end: lines.length - 1 }] };
+  }
+
+  // leaf
+  let text = leafLine(b);
+  const lines: string[] = [];
+  if (text.startsWith("\n")) { lines.push(""); text = text.slice(1); }
+  const bodyStart = lines.length;
+  for (const l of text.split("\n")) lines.push(l ? pad + l : "");
+  return { lines, spans: [{ id: b.id, start: bodyStart, end: lines.length - 1 }] };
+}
+
+function renderChain(first: Blockly.Block | null, indent: number): Rendered {
+  const lines: string[] = [];
+  const spans: Rendered["spans"] = [];
+  let b: Blockly.Block | null = first;
+  while (b) {
+    const r = renderBlock(b, indent);
+    const off = lines.length;
+    r.spans.forEach((s) => spans.push({ id: s.id, start: s.start + off, end: s.end + off }));
+    lines.push(...r.lines);
+    b = b.getNextBlock();
+  }
+  return { lines, spans };
+}
+
 // ---- importer: .nlt text -> workspace JSON (inverse of the generator for the
 // typed patterns; anything unrecognized becomes a free-text instruction) ----
 
-type BlockJson = { type: string; fields?: Record<string, unknown>; next?: { block: BlockJson } };
+type BlockJson = {
+  type: string;
+  fields?: Record<string, unknown>;
+  inputs?: Record<string, { block: BlockJson }>;
+  next?: { block: BlockJson };
+};
 
 function parseLine(line: string): BlockJson | null {
   const l = line.trim();
-  if (!l) return null;
+  if (!l || l === "do nothing") return null;
   let m: RegExpMatchArray | null;
 
   if ((m = l.match(/^@(\w+)(?:\s+(.+))?$/))) {
@@ -390,6 +500,14 @@ function parseLine(line: string): BlockJson | null {
   if ((m = l.match(/^Type "(.+)" into (.+?)( and press enter)?$/i)))
     return { type: "nlt_type", fields: { TEXT: m[1], FIELD: m[2], ENTER: m[3] ? "TRUE" : "FALSE" } };
   if ((m = l.match(/^Click (.+)$/i))) return { type: "nlt_click", fields: { TARGET: m[1] } };
+  if ((m = l.match(/^Print "(.+)"$/i))) return { type: "nlt_print", fields: { TEXT: m[1] } };
+  if ((m = l.match(/^Scroll (up|down|top|bottom)$/i))) return { type: "nlt_scroll", fields: { DIR: m[1].toLowerCase() } };
+  if ((m = l.match(/^Swipe (up|down|left|right)$/i))) return { type: "nlt_swipe", fields: { DIR: m[1].toLowerCase() } };
+  if ((m = l.match(/^Press the (back|home|enter|recent) key$/i))) return { type: "nlt_key", fields: { KEY: m[1].toLowerCase() } };
+  if ((m = l.match(/^GET (.+)$/))) return { type: "nlt_http_get", fields: { URL: m[1] } };
+  if ((m = l.match(/^Run the command "(.+)" and print the output$/i))) return { type: "nlt_ssh_run", fields: { CMD: m[1] } };
+  if ((m = l.match(/^Run the SQL query "(.+)" and log the result$/i))) return { type: "nlt_db_query", fields: { SQL: m[1] } };
+  if ((m = l.match(/^EXPECT that the page contains the text "(.+)"$/i))) return { type: "nlt_expect_contains", fields: { TEXT: m[1] } };
   if ((m = l.match(/^Take a screenshot .*"(.+)"$/i)))
     return { type: "nlt_screenshot", fields: { FILE: m[1] } };
   if ((m = l.match(/^Start the app with package "(.+)"$/i)))
@@ -417,32 +535,74 @@ function parseLine(line: string): BlockJson | null {
   return { type: "nlt_instruction", fields: { TEXT: l } };
 }
 
-/** Parse .nlt text into a Blockly serialization payload (one vertical stack). */
-export function nltToWorkspaceJson(text: string): object {
-  const rawLines = text.split("\n");
+const indentOf = (s: string) => (s.match(/^ */)?.[0].length ?? 0);
+const chainToJson = (items: BlockJson[]): BlockJson | null => {
+  for (let i = items.length - 1; i > 0; i--) items[i - 1].next = { block: items[i] };
+  return items[0] ?? null;
+};
+
+/** Parse a run of lines at `base` indent into a chain of blocks, recursing into
+ *  indented bodies of If / Otherwise / Repeat and BEGIN_PYTHON. */
+function parseChain(lines: string[], i: number, base: number): { items: BlockJson[]; next: number } {
   const items: BlockJson[] = [];
-  for (let i = 0; i < rawLines.length; i++) {
-    const line = rawLines[i];
-    if (line.trim().startsWith("BEGIN_PYTHON")) {
-      const buf: string[] = [];
-      i++;
-      while (i < rawLines.length && !rawLines[i].trim().startsWith("END_PYTHON")) {
-        buf.push(rawLines[i]);
-        i++;
+  while (i < lines.length) {
+    const raw = lines[i];
+    if (!raw.trim()) { i++; continue; }
+    const ind = indentOf(raw);
+    if (ind < base) break;               // dedent → this chain ends
+    if (ind > base) { i++; continue; }    // stray deeper line (defensive)
+    const t = raw.trim();
+    let m: RegExpMatchArray | null;
+
+    if (t.startsWith("BEGIN_PYTHON")) {
+      const buf: string[] = []; i++;
+      while (i < lines.length && lines[i].trim() !== "END_PYTHON") {
+        buf.push(lines[i].slice(base)); i++;
       }
+      i++; // END_PYTHON
       items.push({ type: "nlt_python", fields: { CODE: buf.join("\n") } });
       continue;
     }
-    const b = parseLine(line);
-    if (b) items.push(b);
+    if ((m = t.match(/^If (.+):$/i))) {
+      i++;
+      const doR = parseChain(lines, i, base + 2); i = doR.next;
+      let elseItems: BlockJson[] = [];
+      if (i < lines.length && indentOf(lines[i]) === base && /^Otherwise:$/i.test(lines[i].trim())) {
+        i++; const er = parseChain(lines, i, base + 2); i = er.next; elseItems = er.items;
+      }
+      const block: BlockJson = { type: "nlt_if_c", fields: { COND: m[1] } };
+      block.inputs = {};
+      const doJson = chainToJson(doR.items); if (doJson) block.inputs.DO = { block: doJson };
+      const elseJson = chainToJson(elseItems); if (elseJson) block.inputs.ELSE = { block: elseJson };
+      items.push(block);
+      continue;
+    }
+    if ((m = t.match(/^Repeat (\d+) times:$/i))) {
+      i++; const r = parseChain(lines, i, base + 2); i = r.next;
+      const block: BlockJson = { type: "nlt_repeat", fields: { N: Number(m[1]) } };
+      const j = chainToJson(r.items); if (j) block.inputs = { DO: { block: j } };
+      items.push(block);
+      continue;
+    }
+    if ((m = t.match(/^Repeat until (.+):$/i))) {
+      i++; const r = parseChain(lines, i, base + 2); i = r.next;
+      const block: BlockJson = { type: "nlt_repeat_until", fields: { COND: m[1] } };
+      const j = chainToJson(r.items); if (j) block.inputs = { DO: { block: j } };
+      items.push(block);
+      continue;
+    }
+    const leaf = parseLine(t);
+    if (leaf) items.push(leaf);
+    i++;
   }
-  // chain vertically
-  let chained: BlockJson | undefined;
-  for (let i = items.length - 1; i >= 0; i--) {
-    if (chained) items[i].next = { block: chained };
-    chained = items[i];
-  }
-  const first = chained ? [{ ...chained, x: 24, y: 24 }] : [];
+  return { items, next: i };
+}
+
+/** Parse .nlt text into a Blockly serialization payload. */
+export function nltToWorkspaceJson(text: string): object {
+  const { items } = parseChain(text.split("\n"), 0, 0);
+  const head = chainToJson(items);
+  const first = head ? [{ ...head, x: 24, y: 24 }] : [];
   return { blocks: { languageVersion: 0, blocks: first } };
 }
 
@@ -454,22 +614,14 @@ export function workspaceToNltWithMap(ws: Blockly.Workspace): { text: string; ma
   const tops = (ws.getTopBlocks(true) as Blockly.Block[]);
   const lines: string[] = [];
   const map: BlockLineSpan[] = [];
-  const pushBlank = () => {
-    if (lines.length && lines[lines.length - 1] !== "") lines.push("");
-  };
   for (const top of tops) {
-    pushBlank();
-    let b: Blockly.Block | null = top;
-    while (b) {
-      let l = lineOf(b);
-      if (l) {
-        if (l.startsWith("\n")) { pushBlank(); l = l.slice(1); }
-        const start = lines.length + 1;
-        for (const sub of l.split("\n")) lines.push(sub);
-        map.push({ id: b.id, start, end: lines.length });
-      }
-      b = b.getNextBlock();
-    }
+    const r = renderChain(top, 0);
+    if (!r.lines.length) continue;
+    // blank line between stacks (unless the stack already starts with one)
+    if (lines.length && r.lines[0] !== "" && lines[lines.length - 1] !== "") lines.push("");
+    const off = lines.length;
+    r.spans.forEach((s) => map.push({ id: s.id, start: s.start + off + 1, end: s.end + off + 1 })); // 1-based
+    lines.push(...r.lines);
   }
   while (lines.length && lines[0] === "") { lines.shift(); map.forEach((m) => { m.start--; m.end--; }); }
   while (lines.length && lines[lines.length - 1] === "") lines.pop();
