@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import Editor, { type Monaco } from "@monaco-editor/react";
 import { useStore } from "../state/store";
-import { genLineToSource, sourceToGen, useDebug } from "../state/debug";
+import { genLineToSource, genLineToSourceSpan, sourceToGen, useDebug } from "../state/debug";
 import { defineNltTheme, langForPath, registerNlt } from "../lang/nlt";
 
 export function EditorPane() {
@@ -111,16 +111,20 @@ export function EditorPane() {
             });
             // …and, when the # L<n> markers resolve it, a strong highlight on
             // the EXACT source line being executed.
-            const line = nlt.sourceLine ?? b.lineStart;
+            // strong highlight covers the WHOLE current instruction — a sentence
+            // wrapped over several .nlt lines lights up entirely
+            const span = nlt.genLine != null ? genLineToSourceSpan(b, nlt.genLine) : null;
+            const start = span?.start ?? nlt.sourceLine ?? b.lineStart;
+            const end = span?.end ?? start;
             decos.push({
-              range: new monaco.Range(line, 1, line, 1),
+              range: new monaco.Range(start, 1, end, 1),
               options: {
                 isWholeLine: true,
-                className: nlt.sourceLine ? "current-line" : "",
+                className: span || nlt.sourceLine ? "current-line" : "",
                 glyphMarginClassName: "current-glyph",
               },
             });
-            editor.revealLineInCenterIfOutsideViewport(line);
+            editor.revealLineInCenterIfOutsideViewport(start);
           }
         }
       }
