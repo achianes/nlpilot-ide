@@ -1,0 +1,20 @@
+[
+  {
+    "name": "login",
+    "label": "log in as {USER} with password {PASS}",
+    "template": "Type \"{USER}\" into the username field, then type \"{PASS}\" into the password field, then click the login button",
+    "colour": 160,
+    "tooltip": "Fill a username/password form and submit",
+    "fields": [
+      { "name": "USER", "default": "admin" },
+      { "name": "PASS", "default": "secret" }
+    ]
+  },
+  {
+    "name": "goto_channel",
+    "label": "STB: go to channel {N}",
+    "template": "Tune to channel {N}",
+    "colour": 330,
+    "fields": [ { "name": "N", "default": "501" } ]
+  }
+]
