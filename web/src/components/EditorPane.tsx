@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import Editor, { type Monaco } from "@monaco-editor/react";
 import { useStore } from "../state/store";
-import { genLineToSource, genLineToSourceSpan, sourceToGen, useDebug } from "../state/debug";
+import { genLineToSource, genLineToSourceSpan, useDebug } from "../state/debug";
 import { defineNltTheme, langForPath, registerNlt } from "../lang/nlt";
 
 export function EditorPane() {
@@ -14,7 +14,6 @@ export function EditorPane() {
   const paused = useDebug((s) => s.paused);
   const toggleBreakpoint = useDebug((s) => s.toggleBreakpoint);
   const nlt = useDebug((s) => s.nlt);
-  const nltToggleBreakpoint = useDebug((s) => s.nltToggleBreakpoint);
 
   const isNlt = !!active && active.endsWith(".nlt");
   // Lock the .nlt while its debug session is live — editing would desync the
@@ -50,24 +49,7 @@ export function EditorPane() {
       const line = e.target.position?.lineNumber;
       if (!a || !line) return;
       if (a.endsWith(".nlt")) {
-        const st = useDebug.getState();
-        const gen = st.nlt.generated;
-        if (!gen || st.nlt.file !== a) {
-          // no mapping FOR THIS FILE yet — tell the user instead of silently
-          // ignoring the click (or worse, toggling another file's blocks)
-          useDebug.setState((s) => ({
-            console: [...s.console, { stream: "err", text: "[breakpoint] Generate this file first (⚙) — breakpoints need its generated code to map lines.\n" }],
-          }));
-          return;
-        }
-        const blk = gen.find((b) => line >= b.lineStart && line <= b.lineEnd);
-        if (!blk) return; // directive/comment/blank line — nothing executable here
-        const gl = sourceToGen(blk, line);
-        if (gl != null) {
-          st.nltToggleLineBreakpoint(blk.index, gl); // exact line breakpoint
-        } else {
-          nltToggleBreakpoint(blk.index); // old cache without markers → block bp
-        }
+        useDebug.getState().nltToggleSourceBreakpoint(a, line);
       } else {
         toggleBreakpoint(a, line);
       }

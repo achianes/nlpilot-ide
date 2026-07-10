@@ -392,18 +392,37 @@ export function nltToWorkspaceJson(text: string): object {
   return { blocks: { languageVersion: 0, blocks: first } };
 }
 
-/** Workspace -> .nlt text. Stacks are read top-to-bottom, left-to-right. */
-export function workspaceToNlt(ws: Blockly.Workspace): string {
+export interface BlockLineSpan { id: string; start: number; end: number }
+
+/** Workspace -> .nlt text PLUS a map of every block's 1-based line span in that
+ *  text — the bridge that lets the debugger highlight the live Blockly block. */
+export function workspaceToNltWithMap(ws: Blockly.Workspace): { text: string; map: BlockLineSpan[] } {
   const tops = (ws.getTopBlocks(true) as Blockly.Block[]);
   const lines: string[] = [];
+  const map: BlockLineSpan[] = [];
+  const pushBlank = () => {
+    if (lines.length && lines[lines.length - 1] !== "") lines.push("");
+  };
   for (const top of tops) {
+    pushBlank();
     let b: Blockly.Block | null = top;
     while (b) {
-      const l = lineOf(b);
-      if (l) lines.push(l);
+      let l = lineOf(b);
+      if (l) {
+        if (l.startsWith("\n")) { pushBlank(); l = l.slice(1); }
+        const start = lines.length + 1;
+        for (const sub of l.split("\n")) lines.push(sub);
+        map.push({ id: b.id, start, end: lines.length });
+      }
       b = b.getNextBlock();
     }
-    lines.push(""); // blank line between stacks
   }
-  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
+  while (lines.length && lines[0] === "") { lines.shift(); map.forEach((m) => { m.start--; m.end--; }); }
+  while (lines.length && lines[lines.length - 1] === "") lines.pop();
+  return { text: lines.join("\n") + "\n", map };
+}
+
+/** Workspace -> .nlt text. Stacks are read top-to-bottom, left-to-right. */
+export function workspaceToNlt(ws: Blockly.Workspace): string {
+  return workspaceToNltWithMap(ws).text;
 }
