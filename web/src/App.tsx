@@ -13,6 +13,7 @@ import { GenView } from "./components/GenView";
 import { BusyOverlay } from "./components/BusyOverlay";
 import { StatusBar } from "./components/StatusBar";
 import { DragBar, useSplitSize } from "./components/Split";
+import { BlocksView } from "./components/BlocksView";
 
 export function App() {
   const [connected, setConnected] = useState(false);
@@ -23,6 +24,11 @@ export function App() {
   const ingest = useDebug((s) => s.ingest);
   const nlt = useDebug((s) => s.nlt);
   const showGen = !!nlt.generated;
+
+  // Code editor or Scratch-style visual composer.
+  const [mode, setMode] = useState<"code" | "blocks">(
+    () => (localStorage.getItem("ide:mode") as "code" | "blocks") || "code");
+  useEffect(() => localStorage.setItem("ide:mode", mode), [mode]);
 
   // Resizable panes (persisted).
   const [sidebarW, setSidebarW] = useSplitSize("sidebar", 240);
@@ -45,6 +51,13 @@ export function App() {
       <div className="topbar">
         <h1>nlpilot-ide</h1>
         <span className="root" title={root}>{root}</span>
+        <button
+          className={`mode-btn ${mode === "blocks" ? "on" : ""}`}
+          title="Toggle the Scratch-style visual composer"
+          onClick={() => setMode(mode === "code" ? "blocks" : "code")}
+        >
+          {mode === "code" ? "⧉ Blocks" : "⌨ Code"}
+        </button>
         <DebugToolbar />
         <div className="spacer" />
         <button onClick={() => active && save(active)} disabled={!active}>Save</button>
@@ -91,6 +104,11 @@ export function App() {
               .nlt changed — debug halted. Stop &amp; regenerate to sync the generated Python.
             </div>
           )}
+          {mode === "blocks" ? (
+            <div className="editor-split">
+              <BlocksView />
+            </div>
+          ) : (
           <div className="editor-split">
             <div className="editor-host">
               <EditorPane />
@@ -104,6 +122,7 @@ export function App() {
               </>
             )}
           </div>
+          )}
           <StatusBar />
           <DragBar dir="h" size={consoleH} setSize={setConsoleH} invert min={60} max={700} />
           <div className="console-strip" style={{ height: consoleH }}>
