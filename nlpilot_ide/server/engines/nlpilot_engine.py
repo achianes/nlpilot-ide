@@ -52,6 +52,7 @@ class GenTracer:
         self.stopframe = None
         self.quitting = False
         self._block_first_line_seen = False
+        self.on_pause = None                # optional: called after each pause (live view)
 
     def block_started(self) -> None:
         """Called at each block's on_before_exec: decide initial mode."""
@@ -93,6 +94,11 @@ class GenTracer:
             "genLine": frame.f_lineno,
             "locals": locals_repr,
         })
+        if self.on_pause:
+            try:
+                self.on_pause()   # live view of the backend (browser/phone/…)
+            except Exception:  # noqa: BLE001
+                pass
         while True:
             cmd, arg = self.get_command()
             if cmd == "stepInto" or cmd == "step":
@@ -144,6 +150,7 @@ def _make_hook(send, tracer):
     class IDEHook(DebugHook):
         def __init__(self):
             self._index = 0
+            self._live_env = None
 
         def on_run_start(self, blocks):
             send(("nlt_run_start", {"blocks": len(blocks)}))
@@ -190,6 +197,22 @@ def _make_hook(send, tracer):
                     env._ide_frame_hooked = True
                 except Exception:  # noqa: BLE001
                     pass
+
+            # live embedded view: grab the backend's screen at every pause/step
+            self._live_env = env
+
+            def _live():
+                e = self._live_env
+                png = e.grab_png() if e is not None and hasattr(e, "grab_png") else None
+                if png:
+                    import base64 as _b64
+                    send(("nlt_screenshot", {
+                        "name": f"{getattr(e, 'name', 'backend')} (live)",
+                        "mime": "png",
+                        "b64": _b64.b64encode(png).decode("ascii"),
+                    }))
+
+            tracer.on_pause = _live
             tracer.block_started()
             # settrace installs the global trace for the thread; the exec() that
             # runs immediately after creates the <nlpilot> frame, which the tracer
