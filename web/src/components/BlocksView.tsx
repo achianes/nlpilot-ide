@@ -7,7 +7,7 @@ import {
 } from "../blocks/nltBlocks";
 import { useStore } from "../state/store";
 import { api } from "../api";
-import { genLineToSource, useDebug } from "../state/debug";
+import { genLineToSource, sourceToGen, useDebug } from "../state/debug";
 import { defineNltTheme, registerNlt } from "../lang/nlt";
 import { DragBar, useSplitSize } from "./Split";
 
@@ -40,24 +40,22 @@ const CATEGORY_HINTS: Record<string, string> = {
   Advanced: "X — @allow imports, @workdir, literal Python, comments",
 };
 
-// "Toggle breakpoint" in every block's right-click menu (registered once).
+// "Toggle breakpoint" in every block's right-click menu (registered once). The
+// handler is swapped in per BlocksView instance via `bpHandler`.
 let ctxRegistered = false;
-function registerBreakpointMenu(getMap: () => BlockLineSpan[]) {
+let bpHandler: ((blockId: string) => void) | null = null;
+function registerBreakpointMenu() {
   if (ctxRegistered) return;
   ctxRegistered = true;
   Blockly.ContextMenuRegistry.registry.register({
     id: "nlt_toggle_breakpoint",
     scopeType: Blockly.ContextMenuRegistry.ScopeType.BLOCK,
     weight: 0,
-    displayText: () => "● Toggle breakpoint",
+    displayText: () => "🔴 Toggle breakpoint",
     preconditionFn: () => "enabled",
     callback: (scope: any) => {
       const id = scope.block?.id;
-      const span = getMap().find((m) => m.id === id);
-      const active = useStore.getState().active;
-      if (span && active && active.endsWith(".nlt")) {
-        useDebug.getState().nltToggleSourceBreakpoint(active, span.start);
-      }
+      if (id && bpHandler) bpHandler(id);
     },
   });
 }
@@ -71,13 +69,64 @@ export function BlocksView() {
   const wsRef = useRef<Blockly.WorkspaceSvg | null>(null);
   const mapRef = useRef<BlockLineSpan[]>([]);
   const syncing = useRef(false);
+  const bpIds = useRef<Set<string>>(new Set());   // block ids the user marked
+  const pendingSync = useRef(false);              // resolve bps once generate lands
   const [preview, setPreview] = useState("");
+  const [, setBpTick] = useState(0);              // re-render outlines
   const [customCount, setCustomCount] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);   // bump to re-inject the workspace
   const [previewW, setPreviewW] = useSplitSize("blocksPreview", 340);
 
   const isNlt = !!active && active.endsWith(".nlt");
   const nlt = useDebug((s) => s.nlt);
+
+  // Paint a red outline on every breakpointed block (always visible).
+  function paintBreakpoints() {
+    const ws = wsRef.current;
+    if (!ws) return;
+    for (const m of mapRef.current) {
+      const b = ws.getBlockById(m.id);
+      const root = b?.getSvgRoot();
+      if (root) root.classList.toggle("nlt-bp", bpIds.current.has(m.id));
+    }
+  }
+
+  // Turn the marked block ids into concrete line breakpoints in the debug store.
+  function resolveBreakpoints() {
+    const st = useDebug.getState();
+    const gen = st.nlt.generated;
+    const a = useStore.getState().active;
+    if (!gen || st.nlt.file !== a) return;
+    const lineBps: [number, number][] = [];
+    for (const id of bpIds.current) {
+      const span = mapRef.current.find((m) => m.id === id);
+      if (!span) continue;
+      const blk = gen.find((b) => span.start >= b.lineStart && span.start <= b.lineEnd);
+      if (!blk) continue;
+      const gl = sourceToGen(blk, span.start);
+      if (gl != null) lineBps.push([blk.index, gl]);
+    }
+    useDebug.setState((s) => ({ nlt: { ...s.nlt, lineBreakpoints: lineBps, breakpoints: [] } }));
+  }
+
+  // Right-click "Toggle breakpoint": flip the block, show it now, resolve it
+  // (generating first if the file was never compiled).
+  function toggleBlockBreakpoint(id: string) {
+    const s = bpIds.current;
+    s.has(id) ? s.delete(id) : s.add(id);
+    setBpTick((t) => t + 1);
+    paintBreakpoints();
+    const st = useDebug.getState();
+    const a = useStore.getState().active;
+    if (!a || !a.endsWith(".nlt")) return;
+    if (!st.nlt.generated || st.nlt.file !== a) {
+      pendingSync.current = true;        // resolve once generation lands
+      st.nltGenerate();
+    } else {
+      resolveBreakpoints();
+    }
+  }
+  bpHandler = toggleBlockBreakpoint;
 
   // Load custom_blocks.json from the project root (optional). Cached in
   // localStorage so the inject effect can define blocks synchronously.
@@ -107,7 +156,7 @@ export function BlocksView() {
   useEffect(() => {
     if (!hostRef.current) return;
     defineNltBlocks();
-    registerBreakpointMenu(() => mapRef.current);
+    registerBreakpointMenu();
 
     // Custom user blocks from custom_blocks.json in the project root (optional).
     let n = 0;
@@ -149,6 +198,9 @@ export function BlocksView() {
     const first = workspaceToNltWithMap(ws);
     mapRef.current = first.map;
     setPreview(first.text);
+    // seed outlines from breakpoints already set (e.g. via the editor gutter)
+    seedBreakpointsFromStore();
+    setTimeout(paintBreakpoints, 60);
 
     // blocks -> .nlt text (debounced, only when something really changed)
     let timer: number | undefined;
@@ -163,6 +215,7 @@ export function BlocksView() {
           const { text, map } = workspaceToNltWithMap(ws);
           mapRef.current = map;
           setPreview(text);
+          paintBreakpoints();
           const st = useStore.getState();
           const a = st.active;
           if (a && a.endsWith(".nlt")) {
@@ -205,30 +258,34 @@ export function BlocksView() {
     }
   }, [nlt.sourceLine, nlt.status, nlt.file, active]);
 
-  // ---- breakpoint badges on blocks ----
+  // Seed the marked-block set from breakpoints already in the store (so a bp set
+  // from the editor gutter shows a red outline here too).
+  function seedBreakpointsFromStore() {
+    const st = useDebug.getState();
+    if (!st.nlt.generated || st.nlt.file !== useStore.getState().active) return;
+    const srcLines = new Set<number>();
+    for (const [idx, gl] of st.nlt.lineBreakpoints) {
+      const blk = st.nlt.generated.find((b) => b.index === idx);
+      const s = blk ? genLineToSource(blk, gl) : null;
+      if (s) srcLines.add(s);
+    }
+    for (const idx of st.nlt.breakpoints) {
+      const blk = st.nlt.generated.find((b) => b.index === idx);
+      if (blk) srcLines.add(blk.lineStart);
+    }
+    for (const m of mapRef.current)
+      for (const l of srcLines) if (l >= m.start && l <= m.end) bpIds.current.add(m.id);
+  }
+
+  // When generation lands after a right-click, resolve the held breakpoints.
   useEffect(() => {
-    const ws = wsRef.current;
-    if (!ws) return;
-    const bpLines = new Set<number>();
-    if (nlt.generated && nlt.file === active) {
-      for (const [idx, gl] of nlt.lineBreakpoints) {
-        const blk = nlt.generated.find((b) => b.index === idx);
-        const src = blk ? genLineToSource(blk, gl) : null;
-        if (src) bpLines.add(src);
-      }
-      for (const idx of nlt.breakpoints) {
-        const blk = nlt.generated.find((b) => b.index === idx);
-        if (blk) bpLines.add(blk.lineStart);
-      }
+    if (pendingSync.current && nlt.generated && nlt.file === active) {
+      pendingSync.current = false;
+      resolveBreakpoints();
     }
-    for (const m of mapRef.current) {
-      const block = ws.getBlockById(m.id);
-      if (!block) continue;
-      let has = false;
-      for (const l of bpLines) if (l >= m.start && l <= m.end) { has = true; break; }
-      block.setWarningText(has ? "breakpoint — pauses here" : null);
-    }
-  }, [nlt.lineBreakpoints, nlt.breakpoints, nlt.generated, nlt.file, active, preview]);
+    paintBreakpoints();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nlt.generated, nlt.file, active]);
 
   function beforePreviewMount(monaco: Monaco) {
     registerNlt(monaco);

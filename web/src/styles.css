@@ -180,6 +180,10 @@ button:disabled { background: var(--panel2); color: var(--fg-dim); cursor: defau
 .blocks-import { background: var(--panel2); color: var(--fg); font-size: 11px; padding: 3px 9px; }
 .blocks-import:hover { background: var(--active); }
 
+/* breakpoint outline on a block */
+.nlt-bp > .blocklyPath { stroke: #e51400 !important; stroke-width: 3px !important; }
+.nlt-bp::before { content: ""; }
+
 /* Blockly dark integration (Blockly 13 class names) */
 .blocks-host .blocklyMainBackground { stroke: none; }
 .blocklyToolboxCategoryLabel { color: #d4d4d4 !important; font-size: 12px !important; }
