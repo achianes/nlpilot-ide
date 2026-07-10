@@ -330,7 +330,16 @@ export const useDebug = create<DebugState>((set, get) => ({
     const active = useStore.getState().active;
     if (!active || !active.endsWith(".nlt")) return;
     await saveIfDirty(active); // generate reads from disk
-    set((s) => ({ nlt: { ...s.nlt, file: active, status: "generating", stale: false } }));
+    set((s) => ({
+      nlt: {
+        ...s.nlt, file: active, status: "generating", stale: false,
+        // switching to another file: its old breakpoints/blocks refer to the
+        // previous file's block indices — start clean
+        ...(s.nlt.file !== active
+          ? { generated: null, breakpoints: [], lineBreakpoints: [], blocks: {}, frame: null }
+          : {}),
+      },
+    }));
     ws.send(Cmd.NLT_GENERATE, { path: active });
   },
   nltRun: async () => {
@@ -341,7 +350,14 @@ export const useDebug = create<DebugState>((set, get) => ({
     // Edited or never generated → regenerate first, auto-run when it lands.
     if (n.stale || !n.generated || n.file !== active) {
       pendingRun = true;
-      set((s) => ({ nlt: { ...s.nlt, file: active, status: "generating", stale: false, generated: n.file === active ? s.nlt.generated : null } }));
+      set((s) => ({
+        nlt: {
+          ...s.nlt, file: active, status: "generating", stale: false,
+          ...(n.file !== active
+            ? { generated: null, breakpoints: [], lineBreakpoints: [], blocks: {}, frame: null }
+            : {}),
+        },
+      }));
       ws.send(Cmd.NLT_GENERATE, { path: active });
       return;
     }

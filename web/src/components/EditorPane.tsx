@@ -52,10 +52,11 @@ export function EditorPane() {
       if (a.endsWith(".nlt")) {
         const st = useDebug.getState();
         const gen = st.nlt.generated;
-        if (!gen) {
-          // no mapping yet — tell the user instead of silently ignoring the click
+        if (!gen || st.nlt.file !== a) {
+          // no mapping FOR THIS FILE yet — tell the user instead of silently
+          // ignoring the click (or worse, toggling another file's blocks)
           useDebug.setState((s) => ({
-            console: [...s.console, { stream: "err", text: "[breakpoint] Generate first (⚙) — breakpoints need the generated code to map lines.\n" }],
+            console: [...s.console, { stream: "err", text: "[breakpoint] Generate this file first (⚙) — breakpoints need its generated code to map lines.\n" }],
           }));
           return;
         }
@@ -84,7 +85,9 @@ export function EditorPane() {
       // .nlt: breakpoint glyphs on block start lines; highlight the active block's
       // whole source span (dual-view — source side).
       const gen = nlt.generated;
-      if (gen) {
+      // nlt state (blocks, breakpoints, highlights) belongs to ONE file — never
+      // paint it on a different tab
+      if (gen && nlt.file === active) {
         for (const idx of nlt.breakpoints) {
           const b = gen.find((x) => x.index === idx);
           if (b) decos.push({
