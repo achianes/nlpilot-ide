@@ -127,6 +127,10 @@ interface DebugState {
   nltRun: () => void;
   nltToggleBreakpoint: (index: number) => void;
   nltToggleLineBreakpoint: (index: number, line: number) => void;
+  /** Toggle a breakpoint at a .nlt source line (used by the editor gutter AND
+   *  the Blockly view). Resolves the line to the generated code; reports to the
+   *  console when the file has no generated mapping yet. */
+  nltToggleSourceBreakpoint: (path: string, line: number) => void;
   nltMarkStale: (path: string) => void;
 }
 
@@ -388,6 +392,22 @@ export const useDebug = create<DebugState>((set, get) => ({
       ws.send(has ? Cmd.NLT_CLEAR_LINE_BP : Cmd.NLT_SET_LINE_BP, { index, line });
     }
   },
+  nltToggleSourceBreakpoint: (path, line) => {
+    const st = get();
+    const gen = st.nlt.generated;
+    if (!gen || st.nlt.file !== path) {
+      set((s) => ({
+        console: [...s.console, { stream: "err", text: "[breakpoint] Generate this file first (⚙) — breakpoints need its generated code to map lines.\n" }],
+      }));
+      return;
+    }
+    const blk = gen.find((b) => line >= b.lineStart && line <= b.lineEnd);
+    if (!blk) return; // directive/comment/blank — nothing executable
+    const gl = sourceToGen(blk, line);
+    if (gl != null) st.nltToggleLineBreakpoint(blk.index, gl);
+    else st.nltToggleBreakpoint(blk.index); // old cache without markers
+  },
+
   nltMarkStale: (path) => {
     const n = get().nlt;
     if (n.file === path && (n.status === "running" || n.status === "paused")) {
