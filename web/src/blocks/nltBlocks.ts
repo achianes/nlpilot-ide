@@ -222,6 +222,57 @@ export function defineNltBlocks(): void {
   ]);
 }
 
+// ---- custom user blocks (loaded from custom_blocks.json in the project root) ----
+export interface CustomBlockDef {
+  name: string;                       // unique id → block type custom_<name>
+  label: string;                      // e.g. "login as {USER} {PASS}"
+  template: string;                   // generated sentence, e.g. 'Log in as "{USER}" ...'
+  colour?: number;
+  tooltip?: string;
+  fields?: { name: string; default?: string }[];
+}
+
+const customTemplates: Record<string, string> = {};
+let customToolboxBlocks: { kind: string; type: string }[] = [];
+
+/** Define (or redefine) the user's custom blocks. Returns how many loaded. */
+export function loadCustomBlocks(defs: CustomBlockDef[]): number {
+  const jsonDefs: object[] = [];
+  customToolboxBlocks = [];
+  for (const def of defs) {
+    if (!def?.name || !def?.label || !def?.template) continue;
+    const type = `custom_${def.name}`;
+    const fields = def.fields ?? [];
+    // "{FIELD}" placeholders in the label become Blockly field slots %1..%n
+    let message = def.label;
+    const args: object[] = [];
+    fields.forEach((f, i) => {
+      message = message.replace(`{${f.name}}`, `%${i + 1}`);
+      args.push({ type: "field_input", name: f.name, text: f.default ?? "" });
+    });
+    jsonDefs.push({
+      type, message0: message, args0: args,
+      previousStatement: null, nextStatement: null,
+      colour: def.colour ?? 160,
+      tooltip: def.tooltip ?? def.template,
+    });
+    customTemplates[type] = def.template;
+    customToolboxBlocks.push({ kind: "block", type });
+  }
+  if (jsonDefs.length) Blockly.defineBlocksWithJsonArray(jsonDefs as any);
+  return jsonDefs.length;
+}
+
+/** Toolbox including the user's Custom category when present. */
+export function getToolbox(): object {
+  const contents = [...TOOLBOX.contents] as object[];
+  if (customToolboxBlocks.length) {
+    contents.push({ kind: "category", name: "Custom", colour: "160",
+                    contents: customToolboxBlocks });
+  }
+  return { kind: "categoryToolbox", contents };
+}
+
 export const TOOLBOX = {
   kind: "categoryToolbox",
   contents: [
@@ -270,6 +321,9 @@ function chainText(first: Blockly.Block | null): string {
 
 function lineOf(b: Blockly.Block): string {
   const v = (n: string) => String(b.getFieldValue(n) ?? "").trim();
+  // user-defined blocks: fill the template's {FIELD} placeholders
+  const tpl = customTemplates[b.type];
+  if (tpl) return tpl.replace(/\{(\w+)\}/g, (_, f) => v(f));
   switch (b.type) {
     case "nlt_if_c": {
       const doTxt = chainText(b.getInputTargetBlock("DO")) || "do nothing";

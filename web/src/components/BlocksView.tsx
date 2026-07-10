@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import * as Blockly from "blockly";
+import Editor, { type Monaco } from "@monaco-editor/react";
 import {
-  defineNltBlocks, nltToWorkspaceJson, TOOLBOX,
-  workspaceToNltWithMap, type BlockLineSpan,
+  defineNltBlocks, getToolbox, loadCustomBlocks, nltToWorkspaceJson,
+  workspaceToNltWithMap, type BlockLineSpan, type CustomBlockDef,
 } from "../blocks/nltBlocks";
 import { useStore } from "../state/store";
+import { api } from "../api";
 import { genLineToSource, useDebug } from "../state/debug";
+import { defineNltTheme, registerNlt } from "../lang/nlt";
+import { DragBar, useSplitSize } from "./Split";
 
 // Dark theme matching the rest of the IDE.
 const DARK_THEME = Blockly.Theme.defineTheme("nlt-dark-blocks", {
@@ -68,16 +72,52 @@ export function BlocksView() {
   const mapRef = useRef<BlockLineSpan[]>([]);
   const syncing = useRef(false);
   const [preview, setPreview] = useState("");
+  const [customCount, setCustomCount] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0);   // bump to re-inject the workspace
+  const [previewW, setPreviewW] = useSplitSize("blocksPreview", 340);
 
   const isNlt = !!active && active.endsWith(".nlt");
   const nlt = useDebug((s) => s.nlt);
+
+  // Load custom_blocks.json from the project root (optional). Cached in
+  // localStorage so the inject effect can define blocks synchronously.
+  async function importCustomBlocks(announce: boolean): Promise<void> {
+    try {
+      const { content } = await api.read("custom_blocks.json");
+      const defs = JSON.parse(content) as CustomBlockDef[];
+      localStorage.setItem("customBlocksJson", JSON.stringify(defs));
+      setReloadKey((k) => k + 1);
+      if (announce) {
+        useDebug.setState((s) => ({
+          console: [...s.console, { stream: "out", text: `[blocks] imported ${defs.length} custom block(s) from custom_blocks.json\n` }],
+        }));
+      }
+    } catch {
+      if (announce) {
+        useDebug.setState((s) => ({
+          console: [...s.console, { stream: "err", text: "[blocks] custom_blocks.json not found or invalid in the project root\n" }],
+        }));
+      }
+    }
+  }
+  useEffect(() => { importCustomBlocks(false); /* silent on first mount */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!hostRef.current) return;
     defineNltBlocks();
     registerBreakpointMenu(() => mapRef.current);
+
+    // Custom user blocks from custom_blocks.json in the project root (optional).
+    let n = 0;
+    try {
+      const raw = localStorage.getItem("customBlocksJson");
+      if (raw) n = loadCustomBlocks(JSON.parse(raw) as CustomBlockDef[]);
+    } catch { /* ignore malformed */ }
+
     const ws = Blockly.inject(hostRef.current, {
-      toolbox: TOOLBOX as any,
+      toolbox: getToolbox() as any,
       renderer: "zelos",
       theme: DARK_THEME,
       grid: { spacing: 24, length: 2, colour: "#2f2f2f", snap: true },
@@ -85,6 +125,7 @@ export function BlocksView() {
       trashcan: true,
     });
     wsRef.current = ws;
+    if (n) setCustomCount(n);
 
     setTimeout(() => {
       document.querySelectorAll<HTMLElement>(".blocklyToolboxCategory").forEach((row) => {
@@ -145,7 +186,7 @@ export function BlocksView() {
       wsRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+  }, [active, reloadKey]);
 
   // ---- live debug: glow the executing block, follow the stepper ----
   useEffect(() => {
@@ -189,10 +230,19 @@ export function BlocksView() {
     }
   }, [nlt.lineBreakpoints, nlt.breakpoints, nlt.generated, nlt.file, active, preview]);
 
+  function beforePreviewMount(monaco: Monaco) {
+    registerNlt(monaco);
+    defineNltTheme(monaco);
+  }
+
   return (
     <div className="blocks-view">
       <div className="blocks-bar">
         <span className="blocks-title">VISUAL COMPOSER</span>
+        <button className="blocks-import" title="Load custom blocks from custom_blocks.json in the project root"
+          onClick={() => importCustomBlocks(true)}>
+          ⇩ Import blocks{customCount ? ` (${customCount})` : ""}
+        </button>
         <span className="blocks-hint">
           {isNlt
             ? `two-way sync with ${active!.split("/").pop()} · right-click a block for breakpoints · Debug runs here too`
@@ -201,7 +251,29 @@ export function BlocksView() {
       </div>
       <div className="blocks-main">
         <div className="blocks-host" ref={hostRef} />
-        <pre className="blocks-preview">{preview || "# drag blocks to build your .nlt"}</pre>
+        <DragBar dir="v" size={previewW} setSize={setPreviewW} invert min={180} max={900} />
+        <div className="blocks-preview" style={{ width: previewW, flex: "0 0 auto" }}>
+          <div className="blocks-preview-head">.nlt preview</div>
+          <div className="blocks-preview-editor">
+            <Editor
+              language="nlt"
+              theme="nlt-dark"
+              value={preview || "# drag blocks to build your .nlt"}
+              beforeMount={beforePreviewMount}
+              options={{
+                readOnly: true,
+                fontSize: 12,
+                fontFamily: "'Cascadia Code', Consolas, monospace",
+                minimap: { enabled: false },
+                lineNumbers: "on",
+                folding: false,
+                automaticLayout: true,
+                scrollBeyondLastLine: false,
+                renderWhitespace: "selection",
+              }}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

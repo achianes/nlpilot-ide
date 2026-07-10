@@ -168,12 +168,17 @@ button:disabled { background: var(--panel2); color: var(--fg-dim); cursor: defau
 .blocks-main { flex: 1; display: flex; min-height: 0; }
 .blocks-host { flex: 1; min-width: 0; }
 .blocks-preview {
-  width: 320px; flex: 0 0 auto; margin: 0; padding: 10px;
-  border-left: 1px solid var(--border);
-  font-family: "Cascadia Code", Consolas, monospace; font-size: 11px;
-  color: var(--fg); background: var(--bg);
-  overflow: auto; white-space: pre-wrap;
+  display: flex; flex-direction: column; min-width: 0;
+  border-left: 1px solid var(--border); background: var(--bg);
 }
+.blocks-preview-head {
+  font-size: 11px; letter-spacing: 0.05em; color: var(--fg-dim);
+  padding: 5px 10px; border-bottom: 1px solid var(--border); flex: 0 0 auto;
+}
+.blocks-preview-editor { flex: 1; min-height: 0; position: relative; }
+.blocks-preview-editor > * { position: absolute; inset: 0; }
+.blocks-import { background: var(--panel2); color: var(--fg); font-size: 11px; padding: 3px 9px; }
+.blocks-import:hover { background: var(--active); }
 
 /* Blockly dark integration (Blockly 13 class names) */
 .blocks-host .blocklyMainBackground { stroke: none; }
