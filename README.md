@@ -1,123 +1,88 @@
-# 🐞 Python Debug GUI
+# nlpilot-ide
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](#requirements)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-informational)](#)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](#license)
+The reference editor/debugger IDE for the [nlpilot](https://github.com/achianes/nlpilot)
+natural-language automation framework — built with web technology, shipped as a
+native desktop app (no more tkinter).
 
-A lightweight **desktop GUI debugger** for Python scripts, built with **Tkinter**.  
-Breakpoints, step controls, call stack and variable inspection — without needing a full IDE.
+![Debugging a .nlt script — dual synced view](docs/screenshot-debug.png)
 
----
+*Stepping through a `.nlt` debug session: the **exact source line** lights up in the
+editor (left) in sync with the generated Python line (right). Blocks panel with
+per-block status and breakpoints, live variables, block-aware console.*
 
-## ✨ Highlights
+## What it does
 
-- 🔴 **Breakpoints** (add/remove quickly)
-- ⏭ **Step Into / Step Over / Continue**
-- 🧵 **Call stack** viewer
-- 📦 **Variable inspector** (locals / globals)
-- 🖥 **Integrated console** (stdout / stderr)
-- ⚙️ **Isolated backend** using `multiprocessing` (keeps the GUI responsive)
+Two debuggers behind one UI:
 
----
+- **`.nlt` scripts** — press **⚙ Generate** to compile every block to Python without
+  running it, then **▶ Debug .nlt** to execute for real, block by block:
+  - step **into / over / out** through the generated Python;
+  - the current generated line and its exact `.nlt` source line highlight together
+    (via `# L<n>` markers nlpilot emits);
+  - **block breakpoints** (gutter of the `.nlt`, or the Blocks panel) and **line
+    breakpoints** inside the generated code (gutter of the Generated Python pane);
+  - per-block status: assertions, errors, self-correction attempts;
+  - editing the `.nlt` mid-session halts the debug and regenerates on the next run
+    (only changed blocks are recompiled — the rest come from nlpilot's cache).
+- **plain Python** — classic line-level debugging (breakpoints, step in/over/out,
+  variables, call stack, console) via `bdb`.
 
-## 🖼 Screenshots
+![Editing a .nlt script](docs/screenshot-editor.png)
 
-TBD
-## 🚀 Quick start
+*The `.nlt` editor: backend directives, functions, placeholders and assertion verbs
+highlighted; breakpoints on the gutter; resizable panes everywhere.*
 
-### 1) Clone
+## Desktop app or browser webapp
+
+The same server backs two front doors:
+
+**Native desktop window** (pywebview — recommended):
+
+```powershell
+nlpilot-ide
+# or, with the remote-Ollama launcher (checks the endpoint + model first):
+.\scripts\start.ps1 -Desktop
+```
+
+A real window with a native folder picker, selectable console text, no browser chrome.
+Monaco is bundled locally, so the desktop app works fully offline.
+
+**Browser webapp** (any machine on your LAN can use it):
+
+```powershell
+nlpilot-ide-server            # backend on http://127.0.0.1:8760
+# open http://127.0.0.1:8760 in a browser
+```
+
+Same UI, same features. Useful for a second monitor/machine, or for developing the
+IDE itself with hot reload (`cd web && npm run dev` → http://127.0.0.1:5173, proxied
+to the backend).
+
+## Stack
+
+- **Backend**: FastAPI + WebSocket (`nlpilot_ide/server`) — project file API, debug
+  controller, two engines (`python_engine.py` = bdb in a subprocess,
+  `nlpilot_engine.py` = nlpilot's `DebugHook` + a `sys.settrace` tracer over the
+  generated code).
+- **Frontend**: React + TypeScript + Monaco (`web/`), Monaco bundled for offline use.
+- **Desktop shell**: pywebview (`nlpilot_ide/desktop`).
+
+## Quick start
 
 ```bash
-git clone https://github.com/achianes/python_dbg_gui.git
-cd python_dbg_gui
+pip install -e .
+pip install -e ../nlpilot          # the nlpilot framework, editable
+cd web && npm install && npm run build && cd ..
+nlpilot-ide                        # native window
 ```
 
-### 2) Install dependencies
+Or with the PowerShell launcher, which verifies your (remote) Ollama endpoint and
+model, writes a complete nlpilot config, builds if needed and starts the app:
 
-```bash
-pip install -r requirements.txt
+```powershell
+.\scripts\start.ps1 -OllamaUrl http://192.168.1.50:11434 -Model qwen3-coder:30b -Desktop
 ```
 
-### 3) Run
-
-```bash
-python main.py
-```
-
----
-
-## 🧪 Debugging Flask apps (important)
-
-If you debug a Flask application, disable Werkzeug reloader and threading to avoid spawning extra processes/threads that may confuse tracing:
-
-```python
-app.run(debug=False, use_reloader=False, threaded=False)
-```
-
----
-
-## 🏗 How it works
-
-This project uses:
-
-- `bdb.Bdb` for tracing and breakpoint control
-- `multiprocessing.Process` to run the target script in an isolated backend
-- `Pipe` to communicate between GUI and backend
-- Thread-safe console redirection to show `stdout`/`stderr` in the GUI
-
-Why the backend process matters:
-- Keeps the GUI responsive even when the debugged script blocks or is slow
-- Avoids contaminating the GUI process state
-
----
-
-## 📁 Project structure
-
-```text
-python_dbg_gui/
-├─ gui/                  # GUI + debugger backend components
-├─ main.py               # Entry point
-├─ requirements.txt
-└─ README.md
-```
-
----
-
-## 🧾 Requirements
-
-- Python **3.10+**
-- Tkinter (bundled with standard Python on Windows/macOS; on some Linux distros you may need `python3-tk`)
-
----
-
-## 🗺 Roadmap (ideas)
-
-- [ ] Search + filter in variables view  
-- [ ] Conditional breakpoints  
-- [ ] Watch expressions  
-- [ ] Better support for multi-thread tracing  
-- [ ] Export stack/locals snapshot
-
----
-
-## 🤝 Contributing
-
-PRs are welcome. If you open an issue, include:
-- OS + Python version
-- Steps to reproduce
-- A minimal example script (if possible)
-
----
-
-## License
-
-MIT — see `LICENSE` (or add one if missing).
-
----
-
-## Author
-
-Antonio Chianese  
-GitHub: https://github.com/achianes
-
-[![Support me on PayPal](https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif)](https://www.paypal.com/donate/?hosted_button_id=T4SKREGYTG5ES)
+See [DEV.md](DEV.md) for the full dev guide and [REBUILD_PLAN.md](REBUILD_PLAN.md)
+for architecture and roadmap. Screenshots are regenerated with
+`python scripts/make_screenshots.py` (headless Chrome, seeded demo state).

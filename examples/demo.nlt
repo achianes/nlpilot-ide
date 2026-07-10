@@ -1,0 +1,18 @@
+# demo.nlt — sample nlpilot script for the IDE
+@web
+Go to https://duckduckgo.com
+Type "nlpilot" into the search field and press enter
+Wait 2 seconds
+EXPECT that the page contains the text "nlpilot"
+SAVE a screenshot of the page to "results.png"
+
+@bash
+Print the current working directory
+EXPECT the output is not empty
+
+BEGIN_FUNCTION greet
+Print "hello from a function"
+END_FUNCTION
+
+@bash
+RUN_FUNCTION greet

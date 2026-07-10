@@ -1,1 +1,5 @@
-tkinter
+# nlpilot-ide dependencies are declared in pyproject.toml.
+# Dev install:
+#   pip install -e .
+#   pip install -e ../nlpilot        # nlpilot framework (editable)
+#   cd web && npm install

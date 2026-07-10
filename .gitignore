@@ -52,3 +52,19 @@ Thumbs.db
 # Local config/secrets (adjust to your project)
 .env
 .env.*
+
+# Node / frontend
+node_modules/
+
+# nlpilot generated caches
+.nlpilot_cache/
+.nlpilot_templates/
+
+# Claude Code worktree/session data
+.claude/
+
+# Debug run artifacts
+examples/results.png
+*.png
+# …but README screenshots are tracked
+!docs/*.png
