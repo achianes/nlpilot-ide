@@ -1,0 +1,15 @@
+@web
+Go to https://example.com
+If the page contains "Login":
+  Click the login button
+  Wait 2 seconds
+  Repeat 3 times:
+    Scroll down
+Otherwise:
+  Print "already in"
+BEGIN_PYTHON
+total = 0
+for i in range(3):
+    total += i
+env.log(total)
+END_PYTHON
