@@ -119,6 +119,12 @@ button:disabled { background: var(--panel2); color: var(--fg-dim); cursor: defau
 .tab.active { background: var(--bg); color: var(--fg); }
 .tab-close { color: var(--fg-dim); width: 12px; text-align: center; }
 .tab-close:hover { color: var(--fg); }
+.tabs-closeall {
+  background: transparent; color: var(--fg-dim);
+  font-size: 11px; padding: 0 10px; border-radius: 0;
+  flex: 0 0 auto; margin-left: auto;
+}
+.tabs-closeall:hover { background: var(--panel2); color: var(--fg); }
 
 .editor-split { flex: 1; min-height: 0; display: flex; }
 .editor-host { flex: 1; min-height: 0; min-width: 0; position: relative; }
