@@ -184,6 +184,18 @@ button:disabled { background: var(--panel2); color: var(--fg-dim); cursor: defau
 .nlt-bp > .blocklyPath { stroke: #e51400 !important; stroke-width: 3px !important; }
 .nlt-bp::before { content: ""; }
 
+/* current step: bright green pulsing outline that follows the stepper */
+.nlt-current > .blocklyPath {
+  stroke: #4ec9b0 !important;
+  stroke-width: 4px !important;
+  filter: drop-shadow(0 0 6px #4ec9b0);
+  animation: nltStepPulse 1s ease-in-out infinite;
+}
+@keyframes nltStepPulse {
+  0%, 100% { filter: drop-shadow(0 0 4px #4ec9b0); }
+  50% { filter: drop-shadow(0 0 12px #4ec9b0); }
+}
+
 /* Blockly dark integration (Blockly 13 class names) */
 .blocks-host .blocklyMainBackground { stroke: none; }
 .blocklyToolboxCategoryLabel { color: #d4d4d4 !important; font-size: 12px !important; }

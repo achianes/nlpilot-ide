@@ -241,20 +241,35 @@ export function BlocksView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, reloadKey]);
 
-  // ---- live debug: glow the executing block, follow the stepper ----
+  // ---- live debug: highlight the executing block, follow the stepper ----
+  const curBpRef = useRef<string | null>(null);
   useEffect(() => {
     const ws = wsRef.current;
     if (!ws) return;
     let id: string | null = null;
     if (nlt.file === active && nlt.sourceLine != null &&
         (nlt.status === "paused" || nlt.status === "running")) {
-      const hit = mapRef.current.find(
-        (m) => nlt.sourceLine! >= m.start && nlt.sourceLine! <= m.end);
-      id = hit?.id ?? null;
+      // innermost block containing the current source line (smallest span)
+      let best: BlockLineSpan | null = null;
+      for (const m of mapRef.current) {
+        if (nlt.sourceLine! >= m.start && nlt.sourceLine! <= m.end) {
+          if (!best || (m.end - m.start) < (best.end - best.start)) best = m;
+        }
+      }
+      id = best?.id ?? null;
     }
-    ws.highlightBlock(id); // null clears the glow
+    // move the bright green "current step" outline
+    if (curBpRef.current && curBpRef.current !== id) {
+      ws.getBlockById(curBpRef.current)?.getSvgRoot()?.classList.remove("nlt-current");
+    }
+    curBpRef.current = id;
     if (id) {
+      const root = ws.getBlockById(id)?.getSvgRoot();
+      root?.classList.add("nlt-current");
+      ws.highlightBlock(id);
       try { (ws as any).centerOnBlock?.(id); } catch { /* older API */ }
+    } else {
+      ws.highlightBlock(null);
     }
   }, [nlt.sourceLine, nlt.status, nlt.file, active]);
 
