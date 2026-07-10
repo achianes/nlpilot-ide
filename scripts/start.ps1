@@ -27,6 +27,7 @@ param(
   [int]$Port         = 8760,
   [switch]$Desktop,                  # open the pywebview window instead of browser mode
   [switch]$Build,                    # force a frontend rebuild
+  [switch]$Headless,                 # run @web Chrome headless (embedded live view, no popup)
   [switch]$SkipOllamaCheck           # start even if Ollama is unreachable
 )
 
@@ -76,6 +77,7 @@ $cfg = [ordered]@{
   model_for_instructions = $Model
   model_for_responses   = $ResponsesModel
   vision_model          = $VisionModel
+  headless              = [bool]$Headless
 }
 # Write UTF-8 WITHOUT BOM — Python's json.load rejects a BOM (utf-8-sig needed).
 [System.IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json), (New-Object System.Text.UTF8Encoding($false)))
