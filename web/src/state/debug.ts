@@ -26,20 +26,48 @@ export interface NltState {
 /** Map a 1-based generated-code line to its .nlt source line using the
  *  `# L<n>` markers the compiler asks the model to emit. null = unknown
  *  (old cache entries without markers) → callers fall back to the block span. */
+/** All `# L<n>` markers in a block's code as [instruction n, 0-based code line]. */
+function markersOf(code: string): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  code.split("\n").forEach((l, i) => {
+    const m = l.match(/^\s*#\s*L(\d+)\b/);
+    if (m) out.push([parseInt(m[1], 10), i]);
+  });
+  return out;
+}
+
 export function genLineToSource(block: GenBlock, genLine: number): number | null {
+  return genLineToSourceSpan(block, genLine)?.start ?? null;
+}
+
+/** Like genLineToSource, but returns the WHOLE .nlt span of the instruction
+ *  group: multi-line sentences are several numbered lines that the model merges
+ *  under the first line's marker — highlight all of them, not just the first. */
+export function genLineToSourceSpan(
+  block: GenBlock, genLine: number,
+): { start: number; end: number } | null {
   if (!block.lineMap?.length) return null;
   const lines = block.code.split("\n");
   // BEGIN_PYTHON blocks: the code IS the source — exact 1:1 mapping.
   if (block.raw && lines.length === block.lineMap.length) {
-    return genLine >= 1 && genLine <= lines.length ? block.lineMap[genLine - 1] : null;
+    if (genLine < 1 || genLine > lines.length) return null;
+    const l = block.lineMap[genLine - 1];
+    return { start: l, end: l };
   }
+  const markers = markersOf(block.code);
   let cur: number | null = null;
-  for (let i = 0; i < Math.min(genLine, lines.length); i++) {
-    const m = lines[i].match(/^\s*#\s*L(\d+)\b/);
-    if (m) cur = parseInt(m[1], 10);
+  let next: number | null = null;
+  for (const [n, i] of markers) {
+    if (i < genLine) cur = n;          // marker line index is 0-based; genLine 1-based
+    else if (next == null) { next = n; break; }
   }
   if (cur == null || cur < 1 || cur > block.lineMap.length) return null;
-  return block.lineMap[cur - 1];
+  const start = block.lineMap[cur - 1];
+  // group extends until the line before the next marker's instruction
+  const end = next != null && next >= 1 && next <= block.lineMap.length
+    ? Math.max(start, block.lineMap[next - 1] - 1)
+    : block.lineEnd || start;
+  return { start, end };
 }
 
 /** Inverse mapping: a 1-based .nlt source line → the first executable generated
@@ -60,11 +88,15 @@ export function sourceToGen(block: GenBlock, srcLine: number): number | null {
   }
   const n = block.lineMap.indexOf(srcLine) + 1; // instruction number for # L<n>
   if (n <= 0) return null;
-  const re = new RegExp(`^\\s*#\\s*L${n}\\b`);
-  for (let i = 0; i < lines.length; i++) {
-    if (re.test(lines[i])) return firstExecFrom(i + 1);
+  // The model merges multi-line sentences under the FIRST line's marker, so the
+  // clicked line's own marker may not exist: bind to the nearest marker <= n
+  // (the instruction group that contains this line).
+  let bestIdx: number | null = null;
+  let bestN = -1;
+  for (const [mn, i] of markersOf(block.code)) {
+    if (mn <= n && mn > bestN) { bestN = mn; bestIdx = i; }
   }
-  return null;
+  return bestIdx == null ? null : firstExecFrom(bestIdx + 1);
 }
 
 interface DebugState {
