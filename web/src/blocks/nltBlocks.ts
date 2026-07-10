@@ -118,6 +118,34 @@ export function defineNltBlocks(): void {
       previousStatement: null, nextStatement: null, colour: C.check,
       tooltip: "One-sentence conditional (compiles to a real if/else).",
     },
+    // ---- control flow (compile to one-sentence NL constructs) ----
+    {
+      type: "nlt_if_c",
+      message0: "if %1",
+      args0: [{ type: "field_input", name: "COND", text: 'the page contains "..."' }],
+      message1: "then %1",
+      args1: [{ type: "input_statement", name: "DO" }],
+      message2: "otherwise %1",
+      args2: [{ type: "input_statement", name: "ELSE" }],
+      previousStatement: null, nextStatement: null, colour: C.check,
+      tooltip: "Nest blocks; compiles to a one-sentence if/otherwise.",
+    },
+    {
+      type: "nlt_repeat",
+      message0: "repeat %1 times",
+      args0: [{ type: "field_number", name: "N", value: 3, min: 1 }],
+      message1: "do %1",
+      args1: [{ type: "input_statement", name: "DO" }],
+      previousStatement: null, nextStatement: null, colour: C.check,
+    },
+    {
+      type: "nlt_repeat_until",
+      message0: "repeat until %1",
+      args0: [{ type: "field_input", name: "COND", text: 'the screen shows "..."' }],
+      message1: "do %1",
+      args1: [{ type: "input_statement", name: "DO" }],
+      previousStatement: null, nextStatement: null, colour: C.check,
+    },
     // ---- LLM ----
     {
       type: "nlt_ask",
@@ -208,6 +236,11 @@ export const TOOLBOX = {
       { kind: "block", type: "nlt_expect" },
       { kind: "block", type: "nlt_if" },
     ]},
+    { kind: "category", name: "Control", colour: `${C.check}`, contents: [
+      { kind: "block", type: "nlt_if_c" },
+      { kind: "block", type: "nlt_repeat" },
+      { kind: "block", type: "nlt_repeat_until" },
+    ]},
     { kind: "category", name: "LLM", colour: `${C.llm}`, contents: [
       { kind: "block", type: "nlt_ask" },
       { kind: "block", type: "nlt_ask_image" },
@@ -222,9 +255,31 @@ export const TOOLBOX = {
 };
 
 // ---- generator: one block -> .nlt line(s) ----
+
+/** Flatten a nested statement chain into "step, then step, then step". */
+function chainText(first: Blockly.Block | null): string {
+  const parts: string[] = [];
+  let b = first;
+  while (b) {
+    const l = lineOf(b).replace(/\n+/g, " ").trim();
+    if (l) parts.push(l.replace(/\.$/, ""));
+    b = b.getNextBlock();
+  }
+  return parts.join(", then ");
+}
+
 function lineOf(b: Blockly.Block): string {
   const v = (n: string) => String(b.getFieldValue(n) ?? "").trim();
   switch (b.type) {
+    case "nlt_if_c": {
+      const doTxt = chainText(b.getInputTargetBlock("DO")) || "do nothing";
+      const elseTxt = chainText(b.getInputTargetBlock("ELSE"));
+      return `If ${v("COND")}: ${doTxt}${elseTxt ? `. Otherwise: ${elseTxt}` : ""}`;
+    }
+    case "nlt_repeat":
+      return `Repeat ${v("N")} times: ${chainText(b.getInputTargetBlock("DO")) || "do nothing"}`;
+    case "nlt_repeat_until":
+      return `Repeat until ${v("COND")}: ${chainText(b.getInputTargetBlock("DO")) || "do nothing"}`;
     case "nlt_backend": {
       const dev = v("DEVICE");
       return `\n@${v("BACKEND")}${dev ? " " + dev : ""}`;
@@ -254,6 +309,87 @@ function lineOf(b: Blockly.Block): string {
     case "nlt_comment": return `# ${v("TEXT")}`;
     default: return "";
   }
+}
+
+// ---- importer: .nlt text -> workspace JSON (inverse of the generator for the
+// typed patterns; anything unrecognized becomes a free-text instruction) ----
+
+type BlockJson = { type: string; fields?: Record<string, unknown>; next?: { block: BlockJson } };
+
+function parseLine(line: string): BlockJson | null {
+  const l = line.trim();
+  if (!l) return null;
+  let m: RegExpMatchArray | null;
+
+  if ((m = l.match(/^@(\w+)(?:\s+(.+))?$/))) {
+    const name = m[1].toLowerCase();
+    if (BACKENDS.includes(name))
+      return { type: "nlt_backend", fields: { BACKEND: name, DEVICE: m[2] ?? "" } };
+    if (name === "allow") return { type: "nlt_allow", fields: { MODS: m[2] ?? "" } };
+    if (name === "workdir") return { type: "nlt_workdir", fields: { DIR: m[2] ?? "" } };
+    return { type: "nlt_instruction", fields: { TEXT: l } };
+  }
+  if ((m = l.match(/^#\s?(.*)$/))) return { type: "nlt_comment", fields: { TEXT: m[1] } };
+  if ((m = l.match(/^Go to (.+)$/i))) return { type: "nlt_goto", fields: { URL: m[1] } };
+  if ((m = l.match(/^Wait (\d+(?:\.\d+)?) seconds?$/i)))
+    return { type: "nlt_wait", fields: { SECS: Number(m[1]) } };
+  if ((m = l.match(/^Type "(.+)" into (.+?)( and press enter)?$/i)))
+    return { type: "nlt_type", fields: { TEXT: m[1], FIELD: m[2], ENTER: m[3] ? "TRUE" : "FALSE" } };
+  if ((m = l.match(/^Click (.+)$/i))) return { type: "nlt_click", fields: { TARGET: m[1] } };
+  if ((m = l.match(/^Take a screenshot .*"(.+)"$/i)))
+    return { type: "nlt_screenshot", fields: { FILE: m[1] } };
+  if ((m = l.match(/^Start the app with package "(.+)"$/i)))
+    return { type: "nlt_app_start", fields: { PKG: m[1] } };
+  if ((m = l.match(/^Unlock the phone(?: with the PIN (.+))?$/i)))
+    return { type: "nlt_unlock", fields: { PIN: m[1] ?? "" } };
+  if ((m = l.match(/^Save the text "(.+)" to the file "(.+)"$/i)))
+    return { type: "nlt_save", fields: { TEXT: m[1], FILE: m[2] } };
+  if ((m = l.match(/^EXPECT that the template "(.+)" is visible/i)))
+    return { type: "nlt_match", fields: { FILE: m[1] } };
+  if ((m = l.match(/^EXPECT (?:that )?(.+)$/i))) return { type: "nlt_expect", fields: { COND: m[1] } };
+  if ((m = l.match(/^Ask the LLM to (.+) and print the answer$/i)))
+    return { type: "nlt_ask", fields: { Q: m[1] } };
+  if ((m = l.match(/^Ask the vision model about the image "(.+)": (.+), and print the answer$/i)))
+    return { type: "nlt_ask_image", fields: { FILE: m[1], Q: m[2] } };
+  if (/^Freeze the frame$/i.test(l)) return { type: "nlt_freeze" };
+  if ((m = l.match(/^Load the codes of the "(.+)" remote$/i)))
+    return { type: "nlt_use_remote", fields: { DATASET: m[1] } };
+  if ((m = l.match(/^Press the "(.+)" signal$/i)))
+    return { type: "nlt_press_ir", fields: { SIGNAL: m[1] } };
+  if ((m = l.match(/^Tune to channel (\d+)$/i)))
+    return { type: "nlt_channel", fields: { N: Number(m[1]) } };
+  if ((m = l.match(/^If (.+?): (.+?)\. Otherwise (?:that )?:?\s*(.+)$/i)))
+    return { type: "nlt_if", fields: { COND: m[1], THEN: m[2], ELSE: m[3] } };
+  return { type: "nlt_instruction", fields: { TEXT: l } };
+}
+
+/** Parse .nlt text into a Blockly serialization payload (one vertical stack). */
+export function nltToWorkspaceJson(text: string): object {
+  const rawLines = text.split("\n");
+  const items: BlockJson[] = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i];
+    if (line.trim().startsWith("BEGIN_PYTHON")) {
+      const buf: string[] = [];
+      i++;
+      while (i < rawLines.length && !rawLines[i].trim().startsWith("END_PYTHON")) {
+        buf.push(rawLines[i]);
+        i++;
+      }
+      items.push({ type: "nlt_python", fields: { CODE: buf.join("\n") } });
+      continue;
+    }
+    const b = parseLine(line);
+    if (b) items.push(b);
+  }
+  // chain vertically
+  let chained: BlockJson | undefined;
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (chained) items[i].next = { block: chained };
+    chained = items[i];
+  }
+  const first = chained ? [{ ...chained, x: 24, y: 24 }] : [];
+  return { blocks: { languageVersion: 0, blocks: first } };
 }
 
 /** Workspace -> .nlt text. Stacks are read top-to-bottom, left-to-right. */

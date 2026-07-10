@@ -175,6 +175,14 @@ button:disabled { background: var(--panel2); color: var(--fg-dim); cursor: defau
   overflow: auto; white-space: pre-wrap;
 }
 
+/* Blockly dark integration (Blockly 13 class names) */
+.blocks-host .blocklyMainBackground { stroke: none; }
+.blocklyToolboxCategoryLabel { color: #d4d4d4 !important; font-size: 12px !important; }
+.blocklyToolboxCategory:hover { background: #37373d !important; cursor: pointer; }
+.blocklyToolboxCategory.blocklyToolboxSelected { background: #094771 !important; }
+.blocklyToolbox { background: #252526 !important; border-right: 1px solid var(--border); }
+.blocklyFlyoutLabelText { fill: #d4d4d4 !important; }
+
 /* draggable pane dividers */
 .dragbar { flex: 0 0 auto; background: transparent; transition: background 0.15s; z-index: 5; }
 .dragbar:hover, .dragbar:active { background: var(--accent); }
