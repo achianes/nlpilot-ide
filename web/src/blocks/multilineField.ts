@@ -1,30 +1,72 @@
-// Minimal multi-line text field for Blockly 13 (the core package no longer ships
-// FieldMultilineText). Displays each line on the block and edits in a <textarea>.
+// Multi-line text field for Blockly 13 (core no longer ships FieldMultilineText).
+// Renders each line as its own <text> inside a group and sizes the block to fit;
+// edits in a real <textarea> so Enter inserts a newline.
 import * as Blockly from "blockly";
 
+const LINE_H = 16;
+const CHAR_W = 7; // approx monospace advance at the block font size
+const PAD = 6;
+
 export class FieldMultiline extends Blockly.FieldTextInput {
+  private textGroup_: SVGGElement | null = null;
+
   static fromJson(options: any) {
     return new FieldMultiline(options.text ?? "");
   }
 
-  // ----- display: render the value as several <tspan> lines -----
+  // Build our own text group next to the (hidden) default text element so the
+  // multiline layout is fully under our control.
+  override initView(): void {
+    super.initView();
+    const grp = (this as any).fieldGroup_ as SVGGElement;
+    this.textGroup_ = Blockly.utils.dom.createSvgElement(
+      "g", { class: "blocklyMultilineText" }, grp) as SVGGElement;
+    // hide the default single-line <text>; we draw the lines ourselves
+    const def = this.getTextElement();
+    if (def) def.style.display = "none";
+  }
+
+  private lines_(): string[] {
+    return (this.getText() || "").split("\n");
+  }
+
+  // render_ is called by getSize(); it must update the DOM AND set this.size_.
   protected override render_(): void {
-    const text = this.getText();
-    const lines = text.split("\n");
-    // clear previous text content
-    const el = this.getTextElement();
-    while (el.firstChild) el.removeChild(el.firstChild);
-    const lineHeight = 16;
+    const g = this.textGroup_;
+    if (!g) return;
+    while (g.firstChild) g.removeChild(g.firstChild);
+    const lines = this.lines_();
     lines.forEach((line, i) => {
-      const tspan = Blockly.utils.dom.createSvgElement(
-        "tspan", { x: 0, dy: i === 0 ? "0" : `${lineHeight}` }, el as any);
-      tspan.appendChild(document.createTextNode(line || "​"));
+      const t = Blockly.utils.dom.createSvgElement(
+        "text",
+        {
+          class: "blocklyText",
+          x: PAD,
+          y: PAD + LINE_H * i + LINE_H - 4,
+          "dominant-baseline": "auto",
+        },
+        g,
+      );
+      t.appendChild(document.createTextNode(line || "​"));
     });
-    // size the field to the text
-    const w = Math.max(...lines.map((l) => l.length), 1) * 7 + 8;
-    const h = Math.max(lines.length, 1) * lineHeight + 6;
-    (this as any).size_ = new Blockly.utils.Size(w, h);
-    this.positionTextElement_(0, w);
+    const w = Math.max(...lines.map((l) => l.length), 1) * CHAR_W + PAD * 2;
+    const h = Math.max(lines.length, 1) * LINE_H + PAD * 2;
+    const size = (this as any).size_ as Blockly.utils.Size;
+    size.width = w;
+    size.height = h;
+    // fit the field border rect to the multiline content
+    const border = (this as any).borderRect_ as SVGRectElement | null;
+    if (border) {
+      border.setAttribute("width", `${w}`);
+      border.setAttribute("height", `${h}`);
+    }
+  }
+
+  // Ensure the field is re-measured (and re-rendered) whenever the value changes,
+  // including the initial load — otherwise the block keeps its 1-line size.
+  protected override doValueUpdate_(newValue: any): void {
+    super.doValueUpdate_(newValue);
+    (this as any).isDirty_ = true;
   }
 
   // ----- editor: a real textarea so Enter inserts a newline -----
@@ -53,7 +95,6 @@ export class FieldMultiline extends Blockly.FieldTextInput {
       window.setTimeout(() => { ta.rows = Math.max(2, ta.value.split("\n").length); }, 0);
       return; // let the textarea add the newline
     }
-    // Escape / Tab keep default behaviour
     super.onHtmlInputKeyDown_(e);
   }
 }
