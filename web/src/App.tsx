@@ -71,6 +71,37 @@ export function App() {
             <span>EXPLORER</span>
             <button
               className="folder-btn"
+              title="Create a new file"
+              onClick={async () => {
+                const raw = window.prompt(
+                  "New file name (relative to the project root):",
+                  "untitled.nlt"
+                );
+                if (!raw) return;
+                // normalise slashes; keep it inside the project
+                const rel = raw.trim().replace(/\\/g, "/").replace(/^\/+/, "");
+                if (!rel || rel.includes("..")) {
+                  window.alert("Invalid file name.");
+                  return;
+                }
+                const exists = useStore
+                  .getState()
+                  .open.some((f) => f.path === rel);
+                if (exists && !window.confirm(`${rel} is already open. Overwrite?`)) return;
+                const tmpl = rel.endsWith(".nlt")
+                  ? "@web\n# describe a step per line, e.g.\n# Go to https://example.com\n"
+                  : "";
+                try {
+                  await useStore.getState().newFile(rel, tmpl);
+                } catch (e: any) {
+                  window.alert("Could not create file:\n" + (e?.message ?? e));
+                }
+              }}
+            >
+              ＋ New
+            </button>
+            <button
+              className="folder-btn"
               title="Change project folder"
               onClick={async () => {
                 // Native OS folder chooser via the backend (tkinter). Falls back
