@@ -15,6 +15,7 @@ interface State {
   loadTree: () => Promise<void>;
   setRoot: (path: string) => Promise<void>;
   openFile: (path: string) => Promise<void>;
+  newFile: (path: string, content?: string) => Promise<void>;
   closeFile: (path: string) => void;
   setActive: (path: string) => void;
   edit: (path: string, content: string) => void;
@@ -48,6 +49,18 @@ export const useStore = create<State>((set, get) => ({
     const { content } = await api.read(path);
     set((s) => ({
       open: [...s.open, { path, content, saved: content }],
+      active: path,
+    }));
+  },
+
+  newFile: async (path, content = "") => {
+    // create the file on disk (backend write creates it), refresh the tree, and
+    // open it as the active tab.
+    await api.write(path, content);
+    const tree = await api.tree();
+    set((s) => ({
+      tree,
+      open: [...s.open.filter((f) => f.path !== path), { path, content, saved: content }],
       active: path,
     }));
   },
