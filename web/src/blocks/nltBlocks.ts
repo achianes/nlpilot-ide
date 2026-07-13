@@ -91,6 +91,24 @@ export function defineNltBlocks(): void {
       tooltip: "Display an existing image file in the IDE SCREEN panel (env.show).",
     },
     {
+      type: "nlt_click_image",
+      message0: "click element matching image %1",
+      args0: [{ type: "field_input", name: "REF", text: "button.png" }],
+      previousStatement: null, nextStatement: null, colour: C.action,
+      tooltip: "Click the on-screen element matching a reference image crop "
+        + "(pixel-exact template match, vision fallback).",
+    },
+    {
+      type: "nlt_md_to_pdf",
+      message0: "markdown %1 to PDF %2",
+      args0: [
+        { type: "field_input", name: "SRC", text: "report.md" },
+        { type: "field_input", name: "PDF", text: "report.pdf" },
+      ],
+      previousStatement: null, nextStatement: null, colour: C.action,
+      tooltip: "Convert a Markdown file to a PDF (env.md_to_pdf).",
+    },
+    {
       type: "nlt_app_start",
       message0: "start app %1",
       args0: [{ type: "field_input", name: "PKG", text: "com.whatsapp" }],
@@ -346,9 +364,9 @@ export const TOOLBOX = {
     ]},
     { kind: "category", name: "Actions", colour: `${C.action}`, contents: [
       "nlt_instruction", "nlt_goto", "nlt_type", "nlt_click", "nlt_print",
-      "nlt_wait", "nlt_screenshot", "nlt_show", "nlt_scroll", "nlt_swipe", "nlt_key",
-      "nlt_app_start", "nlt_unlock", "nlt_save",
-      "nlt_http_get", "nlt_ssh_run", "nlt_db_query",
+      "nlt_wait", "nlt_screenshot", "nlt_show", "nlt_click_image", "nlt_scroll",
+      "nlt_swipe", "nlt_key", "nlt_app_start", "nlt_unlock", "nlt_save",
+      "nlt_http_get", "nlt_ssh_run", "nlt_db_query", "nlt_md_to_pdf",
     ].map((t) => ({ kind: "block", type: t }))},
     { kind: "category", name: "Checks", colour: `${C.check}`, contents: [
       { kind: "block", type: "nlt_expect" },
@@ -396,6 +414,8 @@ function leafLine(b: Blockly.Block): string {
     case "nlt_key": return `Press the ${v("KEY")} key`;
     case "nlt_screenshot": return `Take a screenshot of the screen and save it to "${v("FILE")}"`;
     case "nlt_show": return `Show the image "${v("FILE")}" in the IDE`;
+    case "nlt_click_image": return `Click the element matching ${v("REF")}`;
+    case "nlt_md_to_pdf": return `Convert "${v("SRC")}" to "${v("PDF")}" using env.md_to_pdf`;
     case "nlt_app_start": return `Start the app with package "${v("PKG")}"`;
     case "nlt_unlock": return v("PIN") ? `Unlock the phone with the PIN ${v("PIN")}` : "Unlock the phone";
     case "nlt_save": return `Save the text "${v("TEXT")}" to the file "${v("FILE")}"`;
@@ -507,6 +527,7 @@ function parseLine(line: string): BlockJson | null {
     return { type: "nlt_wait", fields: { SECS: Number(m[1]) } };
   if ((m = l.match(/^Type "(.+)" into (.+?)( and press enter)?$/i)))
     return { type: "nlt_type", fields: { TEXT: m[1], FIELD: m[2], ENTER: m[3] ? "TRUE" : "FALSE" } };
+  if ((m = l.match(/^Click the element matching (.+)$/i))) return { type: "nlt_click_image", fields: { REF: m[1] } };
   if ((m = l.match(/^Click (.+)$/i))) return { type: "nlt_click", fields: { TARGET: m[1] } };
   if ((m = l.match(/^Print "(.+)"$/i))) return { type: "nlt_print", fields: { TEXT: m[1] } };
   if ((m = l.match(/^Scroll (up|down|top|bottom)$/i))) return { type: "nlt_scroll", fields: { DIR: m[1].toLowerCase() } };
@@ -515,6 +536,7 @@ function parseLine(line: string): BlockJson | null {
   if ((m = l.match(/^GET (.+)$/))) return { type: "nlt_http_get", fields: { URL: m[1] } };
   if ((m = l.match(/^Run the command "(.+)" and print the output$/i))) return { type: "nlt_ssh_run", fields: { CMD: m[1] } };
   if ((m = l.match(/^Run the SQL query "(.+)" and log the result$/i))) return { type: "nlt_db_query", fields: { SQL: m[1] } };
+  if ((m = l.match(/^Convert "(.+)" to "(.+)" using env\.md_to_pdf$/i))) return { type: "nlt_md_to_pdf", fields: { SRC: m[1], PDF: m[2] } };
   if ((m = l.match(/^EXPECT that the page contains the text "(.+)"$/i))) return { type: "nlt_expect_contains", fields: { TEXT: m[1] } };
   if ((m = l.match(/^Take a screenshot .*"(.+)"$/i)))
     return { type: "nlt_screenshot", fields: { FILE: m[1] } };
