@@ -84,6 +84,13 @@ export function defineNltBlocks(): void {
       previousStatement: null, nextStatement: null, colour: C.action,
     },
     {
+      type: "nlt_show",
+      message0: "show image %1",
+      args0: [{ type: "field_input", name: "FILE", text: "image.png" }],
+      previousStatement: null, nextStatement: null, colour: C.action,
+      tooltip: "Display an existing image file in the IDE SCREEN panel (env.show).",
+    },
+    {
       type: "nlt_app_start",
       message0: "start app %1",
       args0: [{ type: "field_input", name: "PKG", text: "com.whatsapp" }],
@@ -339,7 +346,7 @@ export const TOOLBOX = {
     ]},
     { kind: "category", name: "Actions", colour: `${C.action}`, contents: [
       "nlt_instruction", "nlt_goto", "nlt_type", "nlt_click", "nlt_print",
-      "nlt_wait", "nlt_screenshot", "nlt_scroll", "nlt_swipe", "nlt_key",
+      "nlt_wait", "nlt_screenshot", "nlt_show", "nlt_scroll", "nlt_swipe", "nlt_key",
       "nlt_app_start", "nlt_unlock", "nlt_save",
       "nlt_http_get", "nlt_ssh_run", "nlt_db_query",
     ].map((t) => ({ kind: "block", type: t }))},
@@ -388,6 +395,7 @@ function leafLine(b: Blockly.Block): string {
     case "nlt_swipe": return `Swipe ${v("DIR")}`;
     case "nlt_key": return `Press the ${v("KEY")} key`;
     case "nlt_screenshot": return `Take a screenshot of the screen and save it to "${v("FILE")}"`;
+    case "nlt_show": return `Show the image "${v("FILE")}" in the IDE`;
     case "nlt_app_start": return `Start the app with package "${v("PKG")}"`;
     case "nlt_unlock": return v("PIN") ? `Unlock the phone with the PIN ${v("PIN")}` : "Unlock the phone";
     case "nlt_save": return `Save the text "${v("TEXT")}" to the file "${v("FILE")}"`;
@@ -510,6 +518,8 @@ function parseLine(line: string): BlockJson | null {
   if ((m = l.match(/^EXPECT that the page contains the text "(.+)"$/i))) return { type: "nlt_expect_contains", fields: { TEXT: m[1] } };
   if ((m = l.match(/^Take a screenshot .*"(.+)"$/i)))
     return { type: "nlt_screenshot", fields: { FILE: m[1] } };
+  if ((m = l.match(/^Show the image "(.+)" in the IDE$/i)))
+    return { type: "nlt_show", fields: { FILE: m[1] } };
   if ((m = l.match(/^Start the app with package "(.+)"$/i)))
     return { type: "nlt_app_start", fields: { PKG: m[1] } };
   if ((m = l.match(/^Unlock the phone(?: with the PIN (.+))?$/i)))
