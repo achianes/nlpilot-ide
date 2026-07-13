@@ -74,6 +74,8 @@ class GenTracer:
         self.quitting = False
         self._block_first_line_seen = False
         self.on_pause = None                # optional: called after each pause (live view)
+        self.live = None                    # optional: throttled live-frame grabber
+        self._last_live = 0.0
 
     def block_started(self) -> None:
         """Called at each block's on_before_exec: decide initial mode."""
@@ -88,6 +90,12 @@ class GenTracer:
         if frame.f_code.co_filename != GEN_FILE:
             return None  # never descend into nlpilot/backend internals
         if event == "line":
+            # stream a live frame between statements (driver is idle here), throttled
+            if self.live is not None:
+                now = time.monotonic()
+                if now - self._last_live > 0.7:
+                    self._last_live = now
+                    self.live()
             if self._should_stop(frame):
                 self._pause(frame)
         elif event == "return" and self.mode == "return" and frame is self.stopframe:
@@ -222,6 +230,7 @@ def _make_hook(send, tracer):
             # live embedded view: grab the backend's screen at every pause/step
             self._live_env = env
             tracer.on_pause = self._live
+            tracer.live = self._live   # throttled frames while the block runs
             self._live()   # initial frame at the start of the block (covers a run
                            # with no breakpoints, where the tracer never pauses)
             tracer.block_started()
@@ -342,6 +351,11 @@ def _nlpilot_process_main(source, base_dir, cmd_conn, io_conn, breakpoints,
     try:
         if base_dir and os.path.isdir(base_dir):
             os.chdir(base_dir)
+        # Embedded view: run @web headless by default so no browser window pops up
+        # (the live frames ARE the browser inside the IDE). Set NLPILOT_HEADLESS=0
+        # explicitly to force a visible window.
+        os.environ.setdefault("NLPILOT_HEADLESS", "1")
+
         from nlpilot import Config, Runner
 
         hook = _make_hook(send, tracer)
