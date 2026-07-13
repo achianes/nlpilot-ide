@@ -35,6 +35,14 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $Root) { $Root = $RepoRoot }
 
+# Clean up any selenium Chrome/chromedriver orphaned by a previous run (killing the
+# server leaves chromedriver + Chrome grandchildren behind). Safe: only touches
+# automation instances, not your normal browser.
+Get-Process chromedriver -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" -ErrorAction SilentlyContinue |
+  Where-Object { $_.CommandLine -match '--headless|--test-type|--enable-automation|--remote-debugging-port' } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
 function Info($m) { Write-Host "[nlpilot-ide] $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "[ ok ] $m"       -ForegroundColor Green }
 function Warn($m) { Write-Host "[warn] $m"       -ForegroundColor Yellow }

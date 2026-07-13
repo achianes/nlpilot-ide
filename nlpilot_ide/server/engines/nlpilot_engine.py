@@ -29,6 +29,27 @@ from multiprocessing import Pipe, Process
 GEN_FILE = "<nlpilot>"  # filename nlpilot compiles generated code under
 
 
+def _kill_process_tree(pid: int) -> None:
+    """Kill a process and all its descendants (chromedriver + Chrome spawned by a
+    web debug run) so nothing orphans when a session is stopped hard."""
+    import subprocess
+    import sys as _sys
+
+    try:
+        if _sys.platform == "win32":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
+                           capture_output=True, timeout=10)
+        else:
+            import signal as _sig
+
+            try:
+                os.killpg(os.getpgid(pid), _sig.SIGKILL)
+            except Exception:  # noqa: BLE001
+                os.kill(pid, _sig.SIGKILL)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 # ---------------------------------------------------------------------------
 # tracer: line-steps inside generated code (testable, pipe-independent)
 # ---------------------------------------------------------------------------
@@ -200,24 +221,25 @@ def _make_hook(send, tracer):
 
             # live embedded view: grab the backend's screen at every pause/step
             self._live_env = env
-
-            def _live():
-                e = self._live_env
-                png = e.grab_png() if e is not None and hasattr(e, "grab_png") else None
-                if png:
-                    import base64 as _b64
-                    send(("nlt_screenshot", {
-                        "name": f"{getattr(e, 'name', 'backend')} (live)",
-                        "mime": "png",
-                        "b64": _b64.b64encode(png).decode("ascii"),
-                    }))
-
-            tracer.on_pause = _live
+            tracer.on_pause = self._live
+            self._live()   # initial frame at the start of the block (covers a run
+                           # with no breakpoints, where the tracer never pauses)
             tracer.block_started()
             # settrace installs the global trace for the thread; the exec() that
             # runs immediately after creates the <nlpilot> frame, which the tracer
             # then follows line by line.
             sys.settrace(tracer.trace)
+
+        def _live(self):
+            e = self._live_env
+            png = e.grab_png() if e is not None and hasattr(e, "grab_png") else None
+            if png:
+                import base64 as _b64
+                send(("nlt_screenshot", {
+                    "name": f"{getattr(e, 'name', 'backend')} (live)",
+                    "mime": "png",
+                    "b64": _b64.b64encode(png).decode("ascii"),
+                }))
 
         def on_exception(self, index, error, traceback_str):
             sys.settrace(None)
@@ -231,6 +253,7 @@ def _make_hook(send, tracer):
 
         def on_block_exit(self, index, result):
             sys.settrace(None)
+            self._live()   # final frame of the block (the result of its actions)
             send(("nlt_block_exit", {
                 "index": index, "ok": result.ok, "attempts": result.attempts,
                 "error": result.error,
@@ -440,13 +463,22 @@ class NlpilotDebugSession:
         return {"type": t, "payload": payload}
 
     def stop(self) -> None:
+        # 1) ask the run to stop so the backend tears down (driver.quit closes
+        #    Chrome cleanly); give it a moment to unwind.
         self.send("stop")
-        if self.proc and self.proc.is_alive():
-            try:
-                self.proc.terminate()
-                self.proc.join(timeout=0.5)
-            except Exception:  # noqa: BLE001
-                pass
+        if self.proc:
+            pid = self.proc.pid
+            self.proc.join(timeout=3.0)
+            # 2) if it didn't exit, kill the WHOLE process tree — chromedriver and
+            #    Chrome are descendants of the debug subprocess and would orphan on
+            #    a plain terminate().
+            if self.proc.is_alive():
+                _kill_process_tree(pid)
+                try:
+                    self.proc.terminate()
+                    self.proc.join(timeout=1.0)
+                except Exception:  # noqa: BLE001
+                    pass
         for conn in (self.cmd_conn, self.io_conn):
             try:
                 if conn:
