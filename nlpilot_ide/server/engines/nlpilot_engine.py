@@ -75,6 +75,7 @@ class GenTracer:
         self._block_first_line_seen = False
         self.on_pause = None                # optional: called after each pause (live view)
         self.live = None                    # optional: throttled live-frame grabber
+        self.poll_ui = None                 # optional: drain queued ui_* cmds while running
         self.on_interact = None             # optional: forward click/scroll to backend
         self._last_live = 0.0
 
@@ -91,7 +92,11 @@ class GenTracer:
         if frame.f_code.co_filename != GEN_FILE:
             return None  # never descend into nlpilot/backend internals
         if event == "line":
-            # stream a live frame between statements (driver is idle here), throttled
+            # driver is idle between statements: apply any queued SCREEN-panel
+            # clicks/scrolls now (so the embedded view is interactive even while the
+            # block runs, not only when paused), then stream a throttled live frame.
+            if self.poll_ui is not None:
+                self.poll_ui()
             if self.live is not None:
                 now = time.monotonic()
                 if now - self._last_live > 0.7:
@@ -395,8 +400,30 @@ def _nlpilot_process_main(source, base_dir, cmd_conn, io_conn, breakpoints,
     def get_command():
         return cmd_queue.get()
 
+    def poll_ui():
+        # non-blocking: forward any queued ui_* commands to the live backend,
+        # putting non-ui commands (step/stop/eval/…) back for the pause loop.
+        import queue as _q
+
+        held = []
+        try:
+            while True:
+                cmd, arg = cmd_queue.get_nowait()
+                if cmd in ("ui_click", "ui_scroll", "ui_type") and tracer.on_interact:
+                    try:
+                        tracer.on_interact(cmd, arg)
+                    except Exception:  # noqa: BLE001
+                        pass
+                else:
+                    held.append((cmd, arg))
+        except _q.Empty:
+            pass
+        for item in held:
+            cmd_queue.put(item)
+
     tracer = GenTracer(emit, get_command, current_index=lambda: hook.current_index(),
                        breakpoints=breakpoints, line_breakpoints=line_breakpoints)
+    tracer.poll_ui = poll_ui
 
     threading.Thread(target=reader, daemon=True).start()
 
