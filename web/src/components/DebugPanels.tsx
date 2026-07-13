@@ -1,21 +1,64 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDebug } from "../state/debug";
 import { useStore } from "../state/store";
 import { DragBar, useSplitSize } from "./Split";
 
 /** Live visual of the run: frozen @capture frames AND every env.screenshot(...)
- *  from any backend, shown the moment they happen. Resizable via the drag bar. */
+ *  and the live browser view. Dockable in the sidebar, or "detach" to a floating,
+ *  always-on-top, draggable + resizable window inside the IDE. */
 function CapturePanel() {
   const frame = useDebug((s) => s.nlt.frame);
   const [h, setH] = useSplitSize("capture", 220);
+  const [detached, setDetached] = useState(() => localStorage.getItem("screen:detached") === "1");
+  useEffect(() => localStorage.setItem("screen:detached", detached ? "1" : "0"), [detached]);
+
+  // floating window geometry (persisted)
+  const [box, setBox] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("screen:box") || "") ; }
+    catch { return { x: 80, y: 80, w: 480, h: 320 }; }
+  });
+  useEffect(() => localStorage.setItem("screen:box", JSON.stringify(box)), [box]);
+
+  const drag = useRef<{ px: number; py: number; b: any; mode: "move" | "size" } | null>(null);
+  const onDown = useCallback((mode: "move" | "size") => (e: React.MouseEvent) => {
+    e.preventDefault();
+    drag.current = { px: e.clientX, py: e.clientY, b: { ...box }, mode };
+    const onMove = (ev: MouseEvent) => {
+      const d = drag.current; if (!d) return;
+      const dx = ev.clientX - d.px, dy = ev.clientY - d.py;
+      if (d.mode === "move") setBox({ ...d.b, x: Math.max(0, d.b.x + dx), y: Math.max(0, d.b.y + dy) });
+      else setBox({ ...d.b, w: Math.max(200, d.b.w + dx), h: Math.max(140, d.b.h + dy) });
+    };
+    const onUp = () => { drag.current = null; document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); document.body.style.userSelect = ""; };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    document.body.style.userSelect = "none";
+  }, [box]);
+
   if (!frame) return null;
+  const img = <img src={`data:image/${frame.mime};base64,${frame.b64}`} alt={frame.label} />;
+
+  if (detached) {
+    return (
+      <div className="screen-float" style={{ left: box.x, top: box.y, width: box.w, height: box.h }}>
+        <div className="screen-float-head" onMouseDown={onDown("move")}>
+          <span>SCREEN — {frame.label}</span>
+          <button className="mini" onClick={() => setDetached(false)} title="Dock back into the sidebar">⇲ dock</button>
+        </div>
+        <div className="capture-body">{img}</div>
+        <div className="screen-float-resize" onMouseDown={onDown("size")} />
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="panel capture-panel" style={{ flex: `0 0 ${h}px` }}>
-        <div className="panel-head">SCREEN — {frame.label}</div>
-        <div className="capture-body">
-          <img src={`data:image/${frame.mime};base64,${frame.b64}`} alt={frame.label} />
+        <div className="panel-head">
+          SCREEN — {frame.label}
+          <button className="mini" onClick={() => setDetached(true)} title="Detach to a floating, always-on-top window">⇱ detach</button>
         </div>
+        <div className="capture-body">{img}</div>
       </div>
       <DragBar dir="h" size={h} setSize={setH} min={100} max={800} />
     </>
