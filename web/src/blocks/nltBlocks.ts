@@ -244,6 +244,27 @@ export function defineNltBlocks(): void {
       ],
       previousStatement: null, nextStatement: null, colour: C.llm,
     },
+    {
+      type: "nlt_ask_json",
+      message0: "extract %1 as JSON with keys %2",
+      args0: [
+        { type: "field_input", name: "Q", text: "the price and currency" },
+        { type: "field_input", name: "KEYS", text: "price, currency" },
+      ],
+      previousStatement: null, nextStatement: null, colour: C.llm,
+      tooltip: "Structured LLM answer you can EXPECT on (env.ask_json).",
+    },
+    {
+      type: "nlt_ask_image_json",
+      message0: "in image %1 find %2 as JSON with keys %3",
+      args0: [
+        { type: "field_input", name: "FILE", text: "shot.png" },
+        { type: "field_input", name: "Q", text: "the login button center" },
+        { type: "field_input", name: "KEYS", text: "visible, x, y" },
+      ],
+      previousStatement: null, nextStatement: null, colour: C.llm,
+      tooltip: "Structured vision answer you can EXPECT on (env.ask_image_json).",
+    },
     // ---- capture / IR ----
     {
       type: "nlt_freeze",
@@ -381,6 +402,8 @@ export const TOOLBOX = {
     { kind: "category", name: "LLM", colour: `${C.llm}`, contents: [
       { kind: "block", type: "nlt_ask" },
       { kind: "block", type: "nlt_ask_image" },
+      { kind: "block", type: "nlt_ask_json" },
+      { kind: "block", type: "nlt_ask_image_json" },
     ]},
     { kind: "category", name: "Capture / IR", colour: `${C.media}`, contents: [
       "nlt_freeze", "nlt_match", "nlt_use_remote", "nlt_press_ir", "nlt_channel",
@@ -427,6 +450,8 @@ function leafLine(b: Blockly.Block): string {
     case "nlt_if": return `If ${v("COND")}: ${v("THEN")}. Otherwise ${v("ELSE")}`;
     case "nlt_ask": return `Ask the LLM to ${v("Q")} and print the answer`;
     case "nlt_ask_image": return `Ask the vision model about the image "${v("FILE")}": ${v("Q")}, and print the answer`;
+    case "nlt_ask_json": return `Extract ${v("Q")} as JSON with keys ${v("KEYS")}`;
+    case "nlt_ask_image_json": return `Find in the image "${v("FILE")}" ${v("Q")} as JSON with keys ${v("KEYS")}`;
     case "nlt_freeze": return "Freeze the frame";
     case "nlt_match": return `EXPECT that the template "${v("FILE")}" is visible in the frozen frame`;
     case "nlt_use_remote": return `Load the codes of the "${v("DATASET")}" remote`;
@@ -555,6 +580,10 @@ function parseLine(line: string): BlockJson | null {
     return { type: "nlt_ask", fields: { Q: m[1] } };
   if ((m = l.match(/^Ask the vision model about the image "(.+)": (.+), and print the answer$/i)))
     return { type: "nlt_ask_image", fields: { FILE: m[1], Q: m[2] } };
+  if ((m = l.match(/^Find in the image "(.+)" (.+) as JSON with keys (.+)$/i)))
+    return { type: "nlt_ask_image_json", fields: { FILE: m[1], Q: m[2], KEYS: m[3] } };
+  if ((m = l.match(/^Extract (.+) as JSON with keys (.+)$/i)))
+    return { type: "nlt_ask_json", fields: { Q: m[1], KEYS: m[2] } };
   if (/^Freeze the frame$/i.test(l)) return { type: "nlt_freeze" };
   if ((m = l.match(/^Load the codes of the "(.+)" remote$/i)))
     return { type: "nlt_use_remote", fields: { DATASET: m[1] } };
