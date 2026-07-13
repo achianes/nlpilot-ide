@@ -46,10 +46,11 @@ function CapturePanel() {
     document.body.style.userSelect = "none";
   }, [box]);
 
-  // interactive remote control is possible only while the debugger is paused
-  // (the browser's driver is idle then)
+  // interactive remote control: the backend applies queued clicks/scrolls between
+  // statements (driver idle), so it works while the block RUNS as well as when
+  // PAUSED — just not once the session is idle/finished.
   const nltStatus = useDebug((s) => s.nlt.status);
-  const canInteract = nltStatus === "paused";
+  const canInteract = nltStatus === "paused" || nltStatus === "running";
 
   if (!frame) return null;
   const isLive = frame.label.includes("(live)");
