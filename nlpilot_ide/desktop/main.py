@@ -50,6 +50,16 @@ class _Api:
 
 
 def main() -> None:
+    # Spawn debug subprocesses with pythonw on Windows so no console window flashes.
+    import sys
+    if sys.platform == "win32":
+        import multiprocessing
+        import os
+
+        pyw = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+        if os.path.exists(pyw):
+            multiprocessing.set_executable(pyw)
+
     t = threading.Thread(target=_serve, daemon=True)
     t.start()
     if not _wait_for_server():
