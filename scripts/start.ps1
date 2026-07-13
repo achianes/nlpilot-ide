@@ -106,7 +106,21 @@ Info "IDE root           = $Root"
 # 3. Build the frontend if needed
 # ---------------------------------------------------------------------------
 $dist = Join-Path $RepoRoot "web\dist\index.html"
-if ($Build -or -not (Test-Path $dist)) {
+# Rebuild when: forced (-Build), no dist yet, OR any source under web/src is newer
+# than the built bundle (otherwise a restart silently serves a stale frontend and
+# code changes never reach the browser — a common "my change didn't apply" trap).
+$stale = $false
+if (Test-Path $dist) {
+  $distTime = (Get-Item $dist).LastWriteTimeUtc
+  $srcDir = Join-Path $RepoRoot "web\src"
+  if (Test-Path $srcDir) {
+    $newest = Get-ChildItem $srcDir -Recurse -File -ErrorAction SilentlyContinue |
+              Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+    if ($newest -and $newest.LastWriteTimeUtc -gt $distTime) { $stale = $true }
+  }
+}
+if ($Build -or -not (Test-Path $dist) -or $stale) {
+  if ($stale -and -not $Build) { Info "Frontend sources changed since last build - rebuilding." }
   Info "Building frontend (web/) ..."
   Push-Location (Join-Path $RepoRoot "web")
   try {
@@ -116,7 +130,7 @@ if ($Build -or -not (Test-Path $dist)) {
   } finally { Pop-Location }
   Ok "Frontend built."
 } else {
-  Ok "Frontend already built (web/dist). Use -Build to rebuild."
+  Ok "Frontend already built (web/dist) and up to date."
 }
 
 # ---------------------------------------------------------------------------
