@@ -272,10 +272,25 @@ def _make_hook(send, tracer):
                 if kind == "ui_click":
                     x, y = arg
                     dpr = drv.execute_script("return window.devicePixelRatio") or 1
-                    drv.execute_script(
-                        "var el=document.elementFromPoint(arguments[0],arguments[1]);"
-                        "if(el){el.focus&&el.focus();el.click();}",
-                        x / dpr, y / dpr)
+                    cx, cy = x / dpr, y / dpr   # screenshot px -> CSS viewport px
+                    try:
+                        # native click at the EXACT pixel (el.click() would fire at
+                        # the element centre and drop the X)
+                        for _k in ("mousePressed", "mouseReleased"):
+                            drv.execute_cdp_cmd(
+                                "Input.dispatchMouseEvent",
+                                {"type": _k, "x": cx, "y": cy,
+                                 "button": "left", "clickCount": 1})
+                    except Exception:  # noqa: BLE001 — no CDP: synthetic events
+                        drv.execute_script(
+                            "var x=arguments[0],y=arguments[1];"
+                            "var el=document.elementFromPoint(x,y);"
+                            "if(el){if(el.focus)try{el.focus();}catch(e){}"
+                            "['pointerdown','mousedown','pointerup','mouseup','click']"
+                            ".forEach(function(t){el.dispatchEvent(new MouseEvent(t,"
+                            "{bubbles:true,cancelable:true,composed:true,view:window,"
+                            "clientX:x,clientY:y,button:0}));});}",
+                            cx, cy)
                 elif kind == "ui_scroll":
                     dx, dy = arg
                     drv.execute_script("window.scrollBy(arguments[0], arguments[1]);", dx, dy)
