@@ -591,6 +591,32 @@ function parseChain(lines: string[], i: number, base: number): { items: BlockJso
       items.push(block);
       continue;
     }
+    // inline conditional written in free text: "If <cond>[,:] <then>[. Otherwise <else>]"
+    // (a structured "If ...:" header ends with ':' and was handled above)
+    if (!t.endsWith(":") && (m = t.match(/^If\s+(.+?)\s*[,:]\s*(.+)$/i))) {
+      const cond = m[1].trim();
+      let then = m[2].trim();
+      let els = "";
+      const om = then.match(/^(.*?)[.]?\s*(?:,\s*)?Otherwise[:,]?\s*(.+)$/i);
+      if (om) { then = om[1]; els = om[2]; }
+      else if (i + 1 < lines.length && indentOf(lines[i + 1]) === base &&
+               /^Otherwise\b/i.test(lines[i + 1].trim())) {
+        const nm = lines[i + 1].trim().match(/^Otherwise[:,]?\s*(.+)$/i);
+        if (nm) { els = nm[1]; i++; }
+      }
+      const clean = (s: string) => s.replace(/^then\s+/i, "").replace(/\.$/, "").trim();
+      items.push({ type: "nlt_if", fields: { COND: cond, THEN: clean(then), ELSE: clean(els) } });
+      i++;
+      continue;
+    }
+    // a stray "Otherwise ..." after an inline if -> fold into it as the else
+    if ((m = t.match(/^Otherwise[:,]?\s*(.+)$/i)) && items.length &&
+        items[items.length - 1].type === "nlt_if" &&
+        !(items[items.length - 1].fields?.ELSE)) {
+      items[items.length - 1].fields!.ELSE = m[1].replace(/\.$/, "").trim();
+      i++;
+      continue;
+    }
     const leaf = parseLine(t);
     if (leaf) items.push(leaf);
     i++;
