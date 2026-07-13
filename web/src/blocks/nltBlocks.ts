@@ -541,6 +541,16 @@ const chainToJson = (items: BlockJson[]): BlockJson | null => {
   return items[0] ?? null;
 };
 
+/** Split an inline body ("click X, then wait 2 seconds; print done") into a chain
+ *  of blocks — one per step, on "then" / ";" / ", and ". */
+function splitInlineBody(text: string): BlockJson[] {
+  return text
+    .split(/\s*;\s*|\s*,?\s+then\s+|\s+and\s+then\s+/i)
+    .map((s) => s.replace(/\.$/, "").trim())
+    .filter(Boolean)
+    .map((s) => parseLine(s) ?? { type: "nlt_instruction", fields: { TEXT: s } });
+}
+
 /** Parse a run of lines at `base` indent into a chain of blocks, recursing into
  *  indented bodies of If / Otherwise / Repeat and BEGIN_PYTHON. */
 function parseChain(lines: string[], i: number, base: number): { items: BlockJson[]; next: number } {
@@ -577,7 +587,7 @@ function parseChain(lines: string[], i: number, base: number): { items: BlockJso
       items.push(block);
       continue;
     }
-    if ((m = t.match(/^Repeat (\d+) times:$/i))) {
+    if ((m = t.match(/^(?:Repeat|Loop) (\d+) times:$/i))) {
       i++; const r = parseChain(lines, i, base + 2); i = r.next;
       const block: BlockJson = { type: "nlt_repeat", fields: { N: Number(m[1]) } };
       const j = chainToJson(r.items); if (j) block.inputs = { DO: { block: j } };
@@ -589,6 +599,19 @@ function parseChain(lines: string[], i: number, base: number): { items: BlockJso
       const block: BlockJson = { type: "nlt_repeat_until", fields: { COND: m[1] } };
       const j = chainToJson(r.items); if (j) block.inputs = { DO: { block: j } };
       items.push(block);
+      continue;
+    }
+    // inline loops: "Repeat/Loop N times[,:] <body>", "Repeat until <cond>[,:] <body>"
+    if (!t.endsWith(":") && (m = t.match(/^(?:Repeat|Loop)\s+(\d+)\s+times\s*[,:]\s*(.+)$/i))) {
+      const block: BlockJson = { type: "nlt_repeat", fields: { N: Number(m[1]) } };
+      const j = chainToJson(splitInlineBody(m[2])); if (j) block.inputs = { DO: { block: j } };
+      items.push(block); i++;
+      continue;
+    }
+    if (!t.endsWith(":") && (m = t.match(/^Repeat\s+until\s+(.+?)\s*[,:]\s*(.+)$/i))) {
+      const block: BlockJson = { type: "nlt_repeat_until", fields: { COND: m[1].trim() } };
+      const j = chainToJson(splitInlineBody(m[2])); if (j) block.inputs = { DO: { block: j } };
+      items.push(block); i++;
       continue;
     }
     // inline conditional written in free text: "If <cond>[,:] <then>[. Otherwise <else>]"
