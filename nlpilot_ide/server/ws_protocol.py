@@ -31,6 +31,9 @@ class Cmd:
     NLT_CLEAR_BREAKPOINT = "nlt.clearBreakpoint"  # {index}
     NLT_SET_LINE_BP = "nlt.setLineBreakpoint"     # {index, line}  (line within block code)
     NLT_CLEAR_LINE_BP = "nlt.clearLineBreakpoint"  # {index, line}
+    NLT_UI_CLICK = "nlt.uiClick"       # {x, y}  screenshot-pixel coords (paused only)
+    NLT_UI_SCROLL = "nlt.uiScroll"     # {dx, dy}
+    NLT_UI_TYPE = "nlt.uiType"         # {text}
 
 
 # ---- events: server -> client ----

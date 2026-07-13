@@ -70,6 +70,15 @@ class DebugController:
         if t == Cmd.NLT_CLEAR_LINE_BP and self.nlt:
             self.nlt.remove_line_breakpoint(int(p["index"]), int(p["line"]))
             return None
+        if t == Cmd.NLT_UI_CLICK and self.nlt:
+            self.nlt.ui_click(p["x"], p["y"])
+            return None
+        if t == Cmd.NLT_UI_SCROLL and self.nlt:
+            self.nlt.ui_scroll(p["dx"], p["dy"])
+            return None
+        if t == Cmd.NLT_UI_TYPE and self.nlt:
+            self.nlt.ui_type(p.get("text", ""))
+            return None
         if t == Cmd.INPUT_RESPONSE and self.session:
             self.session.input_response(p.get("id", ""), p.get("text", ""))
             return None

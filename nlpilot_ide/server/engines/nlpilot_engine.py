@@ -75,6 +75,7 @@ class GenTracer:
         self._block_first_line_seen = False
         self.on_pause = None                # optional: called after each pause (live view)
         self.live = None                    # optional: throttled live-frame grabber
+        self.on_interact = None             # optional: forward click/scroll to backend
         self._last_live = 0.0
 
     def block_started(self) -> None:
@@ -153,6 +154,13 @@ class GenTracer:
                     self.emit("nlt_eval", {"expr": arg, "value": _safe_repr(val), "ok": True})
                 except Exception as e:  # noqa: BLE001
                     self.emit("nlt_eval", {"expr": arg, "value": str(e), "ok": False})
+            # interactive remote control while paused (driver is idle): forward a
+            # click/scroll to the live backend, then send a fresh frame — stay paused.
+            if cmd in ("ui_click", "ui_scroll", "ui_type") and self.on_interact:
+                try:
+                    self.on_interact(cmd, arg)
+                except Exception:  # noqa: BLE001
+                    pass
             # unknown command: keep waiting
 
 
@@ -231,6 +239,7 @@ def _make_hook(send, tracer):
             self._live_env = env
             tracer.on_pause = self._live
             tracer.live = self._live   # throttled frames while the block runs
+            tracer.on_interact = self._interact  # remote click/scroll while paused
             self._live()   # initial frame at the start of the block (covers a run
                            # with no breakpoints, where the tracer never pauses)
             tracer.block_started()
@@ -249,6 +258,37 @@ def _make_hook(send, tracer):
                     "mime": "png",
                     "b64": _b64.b64encode(png).decode("ascii"),
                 }))
+
+        def _interact(self, kind, arg):
+            """Forward a click/scroll/type from the SCREEN panel to the live web
+            backend (coords are in screenshot pixels), then push a fresh frame."""
+            e = self._live_env
+            drv = getattr(e, "driver", None)
+            if drv is None:
+                return
+            import time as _t
+
+            try:
+                if kind == "ui_click":
+                    x, y = arg
+                    dpr = drv.execute_script("return window.devicePixelRatio") or 1
+                    drv.execute_script(
+                        "var el=document.elementFromPoint(arguments[0],arguments[1]);"
+                        "if(el){el.focus&&el.focus();el.click();}",
+                        x / dpr, y / dpr)
+                elif kind == "ui_scroll":
+                    dx, dy = arg
+                    drv.execute_script("window.scrollBy(arguments[0], arguments[1]);", dx, dy)
+                elif kind == "ui_type":
+                    drv.execute_script(
+                        "var el=document.activeElement;"
+                        "if(el){el.value=(el.value||'')+arguments[0];"
+                        "el.dispatchEvent(new Event('input',{bubbles:true}));}",
+                        arg)
+                _t.sleep(0.25)
+            except Exception:  # noqa: BLE001
+                pass
+            self._live()
 
         def on_exception(self, index, error, traceback_str):
             sys.settrace(None)
@@ -429,6 +469,15 @@ class NlpilotDebugSession:
 
     def remove_breakpoint(self, index: int) -> None:
         self.send("remove_block_breakpoint", int(index))
+
+    def ui_click(self, x: float, y: float) -> None:
+        self.send("ui_click", (float(x), float(y)))
+
+    def ui_scroll(self, dx: float, dy: float) -> None:
+        self.send("ui_scroll", (float(dx), float(dy)))
+
+    def ui_type(self, text: str) -> None:
+        self.send("ui_type", str(text))
 
     def add_line_breakpoint(self, index: int, line: int) -> None:
         self.send("add_line_breakpoint", (int(index), int(line)))

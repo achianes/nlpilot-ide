@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDebug } from "../state/debug";
 import { useStore } from "../state/store";
+import { ws } from "../ws/client";
+import { Cmd } from "../ws/protocol";
 import { DragBar, useSplitSize } from "./Split";
+
+/** Map a mouse event on the screenshot <img> to screenshot-pixel coords. */
+function imgCoords(e: React.MouseEvent<HTMLImageElement>) {
+  const img = e.currentTarget;
+  const r = img.getBoundingClientRect();
+  const sx = img.naturalWidth / r.width;
+  const sy = img.naturalHeight / r.height;
+  return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
+}
 
 /** Live visual of the run: frozen @capture frames AND every env.screenshot(...)
  *  and the live browser view. Dockable in the sidebar, or "detach" to a floating,
@@ -35,14 +46,39 @@ function CapturePanel() {
     document.body.style.userSelect = "none";
   }, [box]);
 
+  // interactive remote control is possible only while the debugger is paused
+  // (the browser's driver is idle then)
+  const nltStatus = useDebug((s) => s.nlt.status);
+  const canInteract = nltStatus === "paused";
+
   if (!frame) return null;
-  const img = <img src={`data:image/${frame.mime};base64,${frame.b64}`} alt={frame.label} />;
+  const isLive = frame.label.includes("(live)");
+  const onImgClick = (e: React.MouseEvent<HTMLImageElement>) => {
+    if (!canInteract || !isLive) return;
+    const { x, y } = imgCoords(e);
+    ws.send(Cmd.NLT_UI_CLICK, { x, y });
+  };
+  const onImgWheel = (e: React.WheelEvent<HTMLImageElement>) => {
+    if (!canInteract || !isLive) return;   // else fall through to local image scroll
+    e.preventDefault();
+    ws.send(Cmd.NLT_UI_SCROLL, { dx: e.deltaX, dy: e.deltaY });
+  };
+  const img = (
+    <img
+      src={`data:image/${frame.mime};base64,${frame.b64}`}
+      alt={frame.label}
+      className={canInteract && isLive ? "screen-interactive" : ""}
+      onClick={onImgClick}
+      onWheel={onImgWheel}
+      draggable={false}
+    />
+  );
 
   if (detached) {
     return (
       <div className="screen-float" style={{ left: box.x, top: box.y, width: box.w, height: box.h }}>
         <div className="screen-float-head" onMouseDown={onDown("move")}>
-          <span>SCREEN — {frame.label}</span>
+          <span>SCREEN — {frame.label}{canInteract && isLive ? " · click/scroll" : ""}</span>
           <button className="mini" onClick={() => setDetached(false)} title="Dock back into the sidebar">⇲ dock</button>
         </div>
         <div className="capture-body">{img}</div>
@@ -55,7 +91,7 @@ function CapturePanel() {
     <>
       <div className="panel capture-panel" style={{ flex: `0 0 ${h}px` }}>
         <div className="panel-head">
-          SCREEN — {frame.label}
+          SCREEN — {frame.label}{canInteract && isLive ? " · click/scroll" : ""}
           <button className="mini" onClick={() => setDetached(true)} title="Detach to a floating, always-on-top window">⇱ detach</button>
         </div>
         <div className="capture-body">{img}</div>

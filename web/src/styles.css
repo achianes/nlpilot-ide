@@ -356,6 +356,7 @@ button:disabled { background: var(--panel2); color: var(--fg-dim); cursor: defau
   background: #000; overflow: auto;   /* scroll a tall/wide page instead of shrinking it */
 }
 .capture-body img { display: block; width: 100%; height: auto; max-width: none; }
+.capture-body img.screen-interactive { cursor: crosshair; }
 
 /* blocks panel */
 .blk { padding: 2px 2px; border-radius: 3px; }
