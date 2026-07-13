@@ -18,6 +18,9 @@ export const Cmd = {
   NLT_CLEAR_BREAKPOINT: "nlt.clearBreakpoint",
   NLT_SET_LINE_BP: "nlt.setLineBreakpoint",
   NLT_CLEAR_LINE_BP: "nlt.clearLineBreakpoint",
+  NLT_UI_CLICK: "nlt.uiClick",
+  NLT_UI_SCROLL: "nlt.uiScroll",
+  NLT_UI_TYPE: "nlt.uiType",
 } as const;
 
 export const Evt = {
