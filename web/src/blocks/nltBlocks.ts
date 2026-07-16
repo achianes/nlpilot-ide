@@ -310,6 +310,13 @@ export function defineNltBlocks(): void {
       previousStatement: null, nextStatement: null, colour: C.advanced,
     },
     {
+      type: "nlt_include",
+      message0: "include file %1",
+      args0: [{ type: "field_input", name: "PATH", text: "lib/shared.nlt" }],
+      previousStatement: null, nextStatement: null, colour: C.advanced,
+      tooltip: "Include and run another .nlt file here — reuse a shared flow.",
+    },
+    {
       type: "nlt_python",
       message0: "python %1",
       args0: [{ type: "field_multilinetext", name: "CODE",
@@ -409,7 +416,7 @@ export const TOOLBOX = {
       "nlt_freeze", "nlt_match", "nlt_use_remote", "nlt_press_ir", "nlt_channel",
     ].map((t) => ({ kind: "block", type: t }))},
     { kind: "category", name: "Advanced", colour: `${C.advanced}`, contents: [
-      "nlt_allow", "nlt_workdir", "nlt_python", "nlt_comment",
+      "nlt_allow", "nlt_workdir", "nlt_include", "nlt_python", "nlt_comment",
     ].map((t) => ({ kind: "block", type: t }))},
   ],
 };
@@ -459,6 +466,7 @@ function leafLine(b: Blockly.Block): string {
     case "nlt_channel": return `Tune to channel ${v("N")}`;
     case "nlt_allow": return `\n@allow ${v("MODS")}`.trimEnd();
     case "nlt_workdir": return `\n@workdir ${v("DIR")}`.trimEnd();
+    case "nlt_include": return `INCLUDE ${v("PATH")}`;
     case "nlt_comment": return `# ${v("TEXT")}`;
     default: return "";
   }
@@ -546,6 +554,7 @@ function parseLine(line: string): BlockJson | null {
     if (name === "workdir") return { type: "nlt_workdir", fields: { DIR: m[2] ?? "" } };
     return { type: "nlt_instruction", fields: { TEXT: l } };
   }
+  if ((m = l.match(/^INCLUDE\s+(.+)$/i))) return { type: "nlt_include", fields: { PATH: m[1].trim() } };
   if ((m = l.match(/^#\s?(.*)$/))) return { type: "nlt_comment", fields: { TEXT: m[1] } };
   if ((m = l.match(/^Go to (.+)$/i))) return { type: "nlt_goto", fields: { URL: m[1] } };
   if ((m = l.match(/^Wait (\d+(?:\.\d+)?) seconds?$/i)))
