@@ -28,12 +28,33 @@ param(
   [switch]$Desktop,                  # open the pywebview window instead of browser mode
   [switch]$Build,                    # force a frontend rebuild
   [switch]$Headless,                 # run @web Chrome headless (embedded live view, no popup)
-  [switch]$SkipOllamaCheck           # start even if Ollama is unreachable
+  [switch]$SkipOllamaCheck,          # start even if Ollama is unreachable
+  [switch]$Admin                     # relaunch elevated (needed to drive apps that
+                                     # require administrator, e.g. MSI App Player /
+                                     # BlueStacks — one UAC prompt at IDE start, then
+                                     # those apps open without prompting and @vision
+                                     # can control their elevated windows)
 )
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $Root) { $Root = $RepoRoot }
+
+# --- self-elevate when -Admin and not already running as administrator ---
+$isAdmin = ([Security.Principal.WindowsPrincipal] `
+  [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+  [Security.Principal.WindowsBuiltinRole]::Administrator)
+if ($Admin -and -not $isAdmin) {
+  # rebuild the same argument list and relaunch this script as administrator
+  $argList = @('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$PSCommandPath`"")
+  foreach ($kv in $PSBoundParameters.GetEnumerator()) {
+    if ($kv.Value -is [switch]) { if ($kv.Value.IsPresent) { $argList += "-$($kv.Key)" } }
+    else { $argList += "-$($kv.Key)"; $argList += "`"$($kv.Value)`"" }
+  }
+  Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $argList
+  exit
+}
+if ($isAdmin) { Write-Host "[start] running as administrator." -ForegroundColor Green }
 
 # Clean up any selenium Chrome/chromedriver orphaned by a previous run (killing the
 # server leaves chromedriver + Chrome grandchildren behind). Safe: only touches
