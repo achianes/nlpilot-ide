@@ -34,16 +34,24 @@ def _wait_for_server(timeout: float = 10.0) -> bool:
 
 
 class _Api:
-    """Exposed to the web app as window.pywebview.api — native dialogs, etc."""
+    """Exposed to the web app as window.pywebview.api — native dialogs, etc.
+
+    NOTE: the window reference is a PRIVATE (underscore) attribute on purpose.
+    pywebview enumerates public attributes of this object to expose them to JS and
+    recurses into non-callable ones; a public `window` would make it descend into
+    the pywebview Window (a .NET object under the EdgeChromium backend) and crash
+    with "'_Api' value cannot be converted to System.Drawing.Rectangle". The
+    leading underscore makes pywebview skip it.
+    """
 
     def __init__(self) -> None:
-        self.window = None
+        self._window = None
 
     def pick_folder(self):
         """Open the OS folder picker; return the chosen absolute path or None."""
-        if not self.window:
+        if not self._window:
             return None
-        result = self.window.create_file_dialog(webview.FOLDER_DIALOG)
+        result = self._window.create_file_dialog(webview.FOLDER_DIALOG)
         if result:
             return result[0]
         return None
@@ -69,7 +77,7 @@ def main() -> None:
         "nlpilot-ide", _URL, width=1400, height=900, js_api=api,
         text_select=True,  # allow selecting/copying console output etc.
     )
-    api.window = window
+    api._window = window
     webview.start()
 
 
