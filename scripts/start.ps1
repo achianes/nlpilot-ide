@@ -45,8 +45,10 @@ $isAdmin = ([Security.Principal.WindowsPrincipal] `
   [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
   [Security.Principal.WindowsBuiltinRole]::Administrator)
 if ($Admin -and -not $isAdmin) {
-  # rebuild the same argument list and relaunch this script as administrator
-  $argList = @('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$PSCommandPath`"")
+  # rebuild the same argument list and relaunch this script as administrator, with
+  # a HIDDEN window so no PowerShell console shows up for the elevated instance.
+  $argList = @('-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden',
+               '-File',"`"$PSCommandPath`"")
   foreach ($kv in $PSBoundParameters.GetEnumerator()) {
     if ($kv.Value -is [switch]) { if ($kv.Value.IsPresent) { $argList += "-$($kv.Key)" } }
     else { $argList += "-$($kv.Key)"; $argList += "`"$($kv.Value)`"" }
